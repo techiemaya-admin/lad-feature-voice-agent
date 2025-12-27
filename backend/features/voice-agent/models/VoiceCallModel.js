@@ -300,12 +300,12 @@ class VoiceCallModel {
         l.last_name,
         vcl.cost AS call_cost,
         vca.analysis
-      FROM lad_dev.voice_call_logs vcl
-      LEFT JOIN lad_dev.leads l ON l.id = vcl.lead_id
-      LEFT JOIN lad_dev.voice_agents va ON va.id = vcl.agent_id AND va.tenant_id = vcl.tenant_id
+      FROM ${schema}.voice_call_logs vcl
+      LEFT JOIN ${schema}.leads l ON l.id = vcl.lead_id
+      LEFT JOIN ${schema}.voice_agents va ON va.id = vcl.agent_id AND va.tenant_id = vcl.tenant_id
       LEFT JOIN LATERAL (
         SELECT row_to_json(vca_row) AS analysis
-        FROM lad_dev.voice_call_analysis vca_row
+        FROM ${schema}.voice_call_analysis vca_row
         WHERE vca_row.call_log_id = vcl.id
         ORDER BY vca_row.created_at DESC NULLS LAST
         LIMIT 1
