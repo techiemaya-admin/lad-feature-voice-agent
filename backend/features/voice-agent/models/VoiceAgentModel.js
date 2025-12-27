@@ -1,6 +1,6 @@
 /**
  * Voice Agent Model
- * 
+ * 1.0
  * Business entity for voice agents (AI voice assistants)
  * Uses tenant_id for multi-tenancy isolation
  * 

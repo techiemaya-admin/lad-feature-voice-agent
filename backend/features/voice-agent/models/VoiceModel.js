@@ -1,6 +1,6 @@
 /**
  * Voice Model
- * 
+ * 1.0
  * Business entity for voice profiles (voice samples for TTS)
  * Uses tenant_id for multi-tenancy isolation
  * 

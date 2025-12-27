@@ -1,5 +1,5 @@
 /**
- * Voice Agent Feature Manifest 2.0.1
+ * Voice Agent Feature Manifest 2.0.2
  * 
  * AI-powered voice calling system with VAPI integration
  * Supports single calls, batch calling, recording management, and multi-agent support

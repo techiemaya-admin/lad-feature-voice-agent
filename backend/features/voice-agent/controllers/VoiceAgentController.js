@@ -1,6 +1,6 @@
 /**
  * Voice Agent Controller
- * 
+ * 1.0
  * Handles voice agent, voice profile, and phone number management
  * Includes user-specific endpoints for available resources
  */
