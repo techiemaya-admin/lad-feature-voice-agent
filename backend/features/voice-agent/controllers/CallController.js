@@ -430,7 +430,7 @@ class CallController {
         results,
       });
     } catch (error) {
-      console.error('Get batch call logs by batch_id error:', error);
+      logger.error('Get batch call logs by batch_id error:', { error });
       res.status(500).json({
         success: false,
         error: 'Failed to fetch batch call logs',
