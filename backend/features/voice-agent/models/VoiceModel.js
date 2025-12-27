@@ -20,7 +20,7 @@ class VoiceModel {
    * @param {string} tenantId - Tenant ID for isolation
    * @returns {Promise<Array>} Voice profiles
    */
-  async getAllVoices(tenantId) {
+  async getAllVoices(schema, tenantId) {
     const query = `
       SELECT 
         id,
@@ -34,7 +34,7 @@ class VoiceModel {
         is_active,
         created_at,
         updated_at
-      FROM lad_dev.voice_agent_voices
+      FROM ${schema}.voices
       WHERE tenant_id = $1 AND is_active = true
       ORDER BY voice_name ASC
     `;
@@ -52,7 +52,7 @@ class VoiceModel {
    * @param {string} tenantId - Tenant ID for isolation
    * @returns {Promise<Object|null>} Voice profile or null
    */
-  async getVoiceById(voiceId, tenantId) {
+  async getVoiceById(schema, voiceId, tenantId) {
     const query = `
       SELECT 
         id,
@@ -67,7 +67,7 @@ class VoiceModel {
         metadata,
         created_at,
         updated_at
-      FROM lad_dev.voice_agent_voices
+      FROM ${schema}.voices
       WHERE id = $1 AND tenant_id = $2
     `;
 
@@ -82,10 +82,10 @@ class VoiceModel {
    * @param {string} tenantId - Tenant ID for isolation
    * @returns {Promise<string|null>} Voice sample URL (gs:// format) or null
    */
-  async getVoiceSampleUrl(voiceId, tenantId) {
+  async getVoiceSampleUrl(schema, voiceId, tenantId) {
     const query = `
       SELECT voice_sample_url
-      FROM lad_dev.voice_agent_voices
+      FROM ${schema}.voices
       WHERE id = $1 AND tenant_id = $2
     `;
 
@@ -108,6 +108,7 @@ class VoiceModel {
    * @returns {Promise<Object>} Created voice profile
    */
   async createVoice({
+    schema,
     tenantId,
     voiceName,
     description,
@@ -115,10 +116,10 @@ class VoiceModel {
     provider = 'custom',
     language = 'en',
     gender = 'neutral',
-    metadata = {}
+    metadata = {},
   }) {
     const query = `
-      INSERT INTO voices (
+      INSERT INTO ${schema}.voices (
         tenant_id,
         voice_name,
         description,
@@ -166,7 +167,7 @@ class VoiceModel {
    * @param {Object} updates - Fields to update
    * @returns {Promise<Object>} Updated voice profile
    */
-  async updateVoice(voiceId, tenantId, updates) {
+  async updateVoice(schema, voiceId, tenantId, updates) {
     const setClauses = ['updated_at = NOW()'];
     const values = [voiceId, tenantId];
     let paramIndex = 3;
@@ -198,7 +199,7 @@ class VoiceModel {
     }
 
     const query = `
-      UPDATE lad_dev.voice_agent_voices
+      UPDATE ${schema}.voices
       SET ${setClauses.join(', ')}
       WHERE id = $1 AND tenant_id = $2
       RETURNING 
@@ -225,9 +226,9 @@ class VoiceModel {
    * @param {string} tenantId - Tenant ID for isolation
    * @returns {Promise<boolean>} Success
    */
-  async deleteVoice(voiceId, tenantId) {
+  async deleteVoice(schema, voiceId, tenantId) {
     const query = `
-      UPDATE lad_dev.voice_agent_voices
+      UPDATE ${schema}.voices
       SET is_active = false, updated_at = NOW()
       WHERE id = $1 AND tenant_id = $2
     `;
@@ -243,7 +244,7 @@ class VoiceModel {
    * @param {Object} criteria - Search criteria
    * @returns {Promise<Array>} Matching voices
    */
-  async searchVoices(tenantId, criteria = {}) {
+  async searchVoices(schema, tenantId, criteria = {}) {
     const whereClauses = ['tenant_id = $1', 'is_active = true'];
     const values = [tenantId];
     let paramIndex = 2;

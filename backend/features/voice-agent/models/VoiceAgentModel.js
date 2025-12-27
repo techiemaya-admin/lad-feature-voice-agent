@@ -20,18 +20,15 @@ class VoiceAgentModel {
    * @param {string} tenantId - Tenant ID for isolation
    * @returns {Promise<Array>} Voice agents
    */
-  async getAllAgents(tenantId) {
+  async getAllAgents(schema, tenantId) {
     const query = `
-
-
-SELECT
-    vac.*,
-    vav.*
-FROM lad_dev.voice_agent_config_view vac
-JOIN lad_dev.voice_agent_voices vav
-  ON vav.id = vac.voice_id
-WHERE vac.tenant_id = $1;
-
+      SELECT
+        vac.*,
+        vav.*
+      FROM ${schema}.voice_agent_config_view vac
+      JOIN ${schema}.voice_agent_voices vav
+        ON vav.id = vac.voice_id
+      WHERE vac.tenant_id = $1
     `;
 
     const result = await this.db.query(query, [tenantId]);
@@ -45,7 +42,7 @@ WHERE vac.tenant_id = $1;
    * @param {string} tenantId - Tenant ID for isolation
    * @returns {Promise<Object|null>} Voice agent or null
    */
-  async getAgentById(agentId, tenantId) {
+  async getAgentById(schema, agentId, tenantId) {
     const query = `
       SELECT 
         id,
@@ -55,7 +52,7 @@ WHERE vac.tenant_id = $1;
         voice_id,
         created_at,
         updated_at
-      FROM lad_dev.voice_agents
+      FROM ${schema}.voice_agents
       WHERE id = $1 AND tenant_id = $2
     `;
 
@@ -70,7 +67,7 @@ WHERE vac.tenant_id = $1;
    * @param {string} tenantId - Tenant ID for isolation
    * @returns {Promise<Object|null>} Voice agent or null
    */
-  async getAgentByName(agentName, tenantId) {
+  async getAgentByName(schema, agentName, tenantId) {
     const query = `
       SELECT 
         id,
@@ -80,7 +77,7 @@ WHERE vac.tenant_id = $1;
         voice_id,
         created_at,
         updated_at
-      FROM lad_dev.voice_agents
+      FROM ${schema}.voice_agents
       WHERE name = $1 AND tenant_id = $2
     `;
 
@@ -95,10 +92,10 @@ WHERE vac.tenant_id = $1;
    * @param {string} tenantId - Tenant ID for isolation
    * @returns {Promise<string|null>} Voice ID or null
    */
-  async getVoiceIdByAgentId(agentId, tenantId) {
+  async getVoiceIdByAgentId(schema, agentId, tenantId) {
     const query = `
       SELECT voice_id
-      FROM lad_dev.voice_agents
+      FROM ${schema}.voice_agents
       WHERE id = $1 AND tenant_id = $2
     `;
 
@@ -148,14 +145,15 @@ WHERE vac.tenant_id = $1;
    * @returns {Promise<Object>} Created agent
    */
   async createAgent({
+    schema,
     tenantId,
     agentName,
     agentLanguage = 'en',
     voiceId,
-    metadata = {}
+    metadata = {},
   }) {
     const query = `
-      INSERT INTO lad_dev.voice_agents (
+      INSERT INTO ${schema}.voice_agents (
         tenant_id,
         name,
         language,
@@ -196,7 +194,7 @@ WHERE vac.tenant_id = $1;
    * @param {Object} updates - Fields to update
    * @returns {Promise<Object>} Updated agent
    */
-  async updateAgent(agentId, tenantId, updates) {
+  async updateAgent(schema, agentId, tenantId, updates) {
     const setClauses = ['updated_at = NOW()'];
     const values = [agentId, tenantId];
     let paramIndex = 3;
@@ -217,7 +215,7 @@ WHERE vac.tenant_id = $1;
       paramIndex++;
     }
     const query = `
-      UPDATE lad_dev.voice_agents
+      UPDATE ${schema}.voice_agents
       SET ${setClauses.join(', ')}
       WHERE id = $1 AND tenant_id = $2
       RETURNING 
@@ -240,9 +238,9 @@ WHERE vac.tenant_id = $1;
    * @param {string} tenantId - Tenant ID for isolation
    * @returns {Promise<boolean>} Success
    */
-  async deleteAgent(agentId, tenantId) {
+  async deleteAgent(schema, agentId, tenantId) {
     const query = `
-      DELETE FROM lad_dev.voice_agents
+      DELETE FROM ${schema}.voice_agents
       WHERE id = $1 AND tenant_id = $2
     `;
 

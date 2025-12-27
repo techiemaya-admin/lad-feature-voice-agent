@@ -11,6 +11,10 @@ const {
   PhoneNumberModel 
 } = require('../models');
 const { RecordingService } = require('../services');
+const { getSchemaFromRequest } = require('../utils/schemaHelper');
+const { getLogger } = require('../utils/logger');
+
+const logger = getLogger();
 
 class VoiceAgentController {
   constructor(db) {
@@ -217,7 +221,7 @@ class VoiceAgentController {
         count: agents.length
       });
     } catch (error) {
-      console.error('Get all agents error:', error);
+      logger.error('Get all agents error:', error);
       res.status(500).json({
         success: false,
         error: 'Failed to fetch agents',
@@ -229,19 +233,6 @@ class VoiceAgentController {
   /**
    * GET /agent/:name
    * Get agent by name
-   */
-  async getAgentByName(req, res) {
-    try {
-      const { name } = req.params;
-      const tenantId = req.tenantId || req.user?.tenantId;
-
-      const agent = await this.agentModel.getAgentByName(name, tenantId);
-
-      if (!agent) {
-        return res.status(404).json({
-          success: false,
-          error: 'Agent not found'
-        });
       }
 
       res.json({
@@ -265,8 +256,9 @@ class VoiceAgentController {
   async getAllVoices(req, res) {
     try {
       const tenantId = req.tenantId || req.user?.tenantId;
+      const schema = getSchemaFromRequest(req);
 
-      const voices = await this.voiceModel.getAllVoices(tenantId);
+      const voices = await this.voiceModel.getAllVoices(schema, tenantId);
 
       res.json({
         success: true,
@@ -274,7 +266,7 @@ class VoiceAgentController {
         count: voices.length
       });
     } catch (error) {
-      console.error('Get all voices error:', error);
+      logger.error('Get all voices error:', error);
       res.status(500).json({
         success: false,
         error: 'Failed to fetch voices',
@@ -290,8 +282,9 @@ class VoiceAgentController {
   async getAllPhoneNumbers(req, res) {
     try {
       const tenantId = req.tenantId || req.user?.tenantId;
+      const schema = getSchemaFromRequest(req);
 
-      const numbers = await this.phoneModel.getAllPhoneNumbers(tenantId);
+      const numbers = await this.phoneModel.getAllPhoneNumbers(schema, tenantId);
 
       res.json({
         success: true,

@@ -184,6 +184,16 @@ function createVoiceAgentRouter(db, options = {}) {
   );
 
   /**
+   * GET /calllogs/batch/:batch_id
+   * Get call logs for a specific batch
+   */
+  router.get(
+    '/calllogs/batch/:batch_id',
+    tenantMiddleware,
+    (req, res) => callController.getBatchCallLogsByBatchId(req, res)
+  );
+
+  /**
    * POST /calls/batch
    * Initiate batch voice calls
    */
