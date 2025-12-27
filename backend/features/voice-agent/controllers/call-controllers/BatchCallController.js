@@ -1,4 +1,5 @@
 const { VAPIService } = require('../../services');
+const axios = require('axios');
 
 class BatchCallController {
   constructor(db) {
