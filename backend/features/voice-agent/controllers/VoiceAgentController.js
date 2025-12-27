@@ -42,7 +42,7 @@ class VoiceAgentController {
         count: agents.length
       });
     } catch (error) {
-      console.error('Get user available agents error:', error);
+      logger.error('Get user available agents error:', error);
       res.status(500).json({
         success: false,
         error: 'Failed to fetch available agents',
@@ -69,7 +69,7 @@ class VoiceAgentController {
         count: numbers.length
       });
     } catch (error) {
-      console.error('Get user available numbers error:', error);
+      logger.error('Get user available numbers error:', error);
       res.status(500).json({
         success: false,
         error: 'Failed to fetch available numbers',
@@ -123,7 +123,7 @@ class VoiceAgentController {
         }
       });
     } catch (error) {
-      console.error('Get voice sample signed URL error:', error);
+      logger.error('Get voice sample signed URL error:', error);
       res.status(500).json({
         success: false,
         error: 'Failed to generate signed URL',
@@ -189,7 +189,7 @@ class VoiceAgentController {
         }
       });
     } catch (error) {
-      console.error('Get agent voice sample signed URL error:', error);
+      logger.error('Get agent voice sample signed URL error:', error);
       res.status(500).json({
         success: false,
         error: 'Failed to generate signed URL',
@@ -206,7 +206,7 @@ class VoiceAgentController {
     try {
       const tenantId = req.tenantId || req.user?.tenantId;
 
-      console.log('[/api/voiceagent/all] request context:', {
+      logger.info('[/api/voiceagent/all] request context:', {
         user: req.user,
         tenantId,
         headersTenantId: req.headers['x-tenant-id'],
@@ -240,7 +240,7 @@ class VoiceAgentController {
         data: agent
       });
     } catch (error) {
-      console.error('Get agent by name error:', error);
+      logger.error('Get agent by name error:', error);
       res.status(500).json({
         success: false,
         error: 'Failed to fetch agent',
@@ -292,7 +292,7 @@ class VoiceAgentController {
         count: numbers.length
       });
     } catch (error) {
-      console.error('Get all phone numbers error:', error);
+      logger.error('Get all phone numbers error:', error);
       res.status(500).json({
         success: false,
         error: 'Failed to fetch phone numbers',
