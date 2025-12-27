@@ -74,7 +74,7 @@ class CallInitiationController {
           to_number: phoneNumber,
           added_context: addedContext,
           initiated_by: userId,
-          agent_id: agentId ? parseInt(agentId, 10) : null,
+          agent_id: parseInt(agentId, 10),
           lead_name: leadName,
           lead_id: leadId
         };
