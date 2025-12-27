@@ -1,5 +1,5 @@
 /**
- * Voice Agent Models Index
+ * Voice Agent Models Index1.0
  * 
  * Exports all voice agent models for easy import
  * Also re-exports core models for convenience

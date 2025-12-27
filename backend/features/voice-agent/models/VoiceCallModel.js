@@ -1,6 +1,6 @@
 /**
  * Voice Call Model
- * 
+ * 1.0
  * Business entity for voice calls (not feature-prefixed)
  * Uses tenant_id for multi-tenancy isolation
  * 

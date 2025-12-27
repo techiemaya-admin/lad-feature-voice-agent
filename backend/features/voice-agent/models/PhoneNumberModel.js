@@ -1,6 +1,6 @@
 /**
  * Phone Number Model
- * 
+ * 1.0
  * Business entity for phone numbers used in voice calls
  * Uses tenant_id for multi-tenancy isolation
  * 

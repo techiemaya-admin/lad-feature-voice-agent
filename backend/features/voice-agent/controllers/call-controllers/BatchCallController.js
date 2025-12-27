@@ -7,7 +7,7 @@ class BatchCallController {
   }
 
   /**
-   * Initiate batch voice calls
+   * Initiate batch voice calls1.0
    */
   async batchInitiateCalls(req, res) {
     try {

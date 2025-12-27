@@ -1,5 +1,5 @@
 /**
- * Backend Manifest
+ * Backend Manifest 2.0
  * 
  * This is a root manifest file that exports the voice agent feature manifest
  * to maintain backward compatibility with the CI/CD pipeline.
