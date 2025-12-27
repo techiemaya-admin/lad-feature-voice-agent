@@ -1,14 +1,13 @@
 /**
- * Call Controller1.0
+ * Call Controller
  * 
- * Handles call management, call logs, and call-related operations
- * Note: Call initiation and batch calls have been moved to separate controllers
+ * Handles voice call initiation, batch calling, and call management
+ * Integrates with VAPI service and call logging
  */
 require('dotenv')
 const axios = require('axios');
 const { VoiceCallModel, PhoneResolverModel, VoiceAgentModel } = require('../models');
 const { VAPIService, CallLoggingService, RecordingService } = require('../services');
-const { getSchema } = require('../../../core/utils/schemaHelper');
 
 class CallController {
   constructor(db) {
@@ -18,6 +17,284 @@ class CallController {
     this.vapiService = new VAPIService();
     this.callLoggingService = new CallLoggingService(db);
     this.recordingService = new RecordingService();
+  }
+
+  /**
+   * POST /calls
+   * Initiate a single voice call
+   */
+  async initiateCall(req, res) {
+    try {
+      const tenantId = req.tenantId || req.user?.tenantId;
+      const userId = req.user?.id;
+
+      const {
+        phoneNumber,
+        leadName,
+        leadId,
+        agentId,
+        voiceId,
+        fromNumber,
+        addedContext,
+        assistantOverrides = {}
+      } = req.body;
+
+      // Validate required fields
+      if (!phoneNumber || !agentId) {
+        return res.status(400).json({
+          success: false,
+          error: 'phoneNumber and agentId are required'
+        });
+      }
+
+      // Check if should use VAPI
+      if (this.vapiService.shouldUseVAPI(agentId)) {
+        // Route to VAPI
+        const vapiResult = await this.vapiService.initiateCall({
+          phoneNumber,
+          leadName: leadName || 'there',
+          agentId,
+          addedContext,
+          assistantOverrides
+        });
+
+        if (!vapiResult.success) {
+          return res.status(500).json({
+            success: false,
+            error: 'Failed to initiate VAPI call',
+            details: vapiResult.error
+          });
+        }
+
+        // Log the call
+        const callLog = await this.callLoggingService.createCallLog({
+          tenantId,
+          voiceId,
+          agentId,
+          fromNumber,
+          toNumber: phoneNumber,
+          leadId,
+          initiatedBy: userId,
+          addedContext,
+          vapiResponse: vapiResult.data
+        });
+
+        return res.json({
+          success: true,
+          message: 'Call initiated via VAPI',
+          data: {
+            callId: callLog.id,
+            vapiCallId: vapiResult.vapiCallId,
+            status: vapiResult.status,
+            phoneNumber,
+            leadName
+          }
+        });
+      } else {
+        // Custom agent (non-VAPI) - forward to legacy BASE_URL /calls endpoint
+        const baseUrl = process.env.BASE_URL;
+        const frontendHeader = process.env.BASE_URL_FRONTEND_HEADER;
+        const frontendApiKey = process.env.BASE_URL_FRONTEND_APIKEY;
+
+        if (!baseUrl) {
+          return res.status(500).json({
+            success: false,
+            error: 'BASE_URL is not configured for call forwarding'
+          });
+        }
+
+        const callPayload = {
+          voice_id: voiceId || null,
+          from_number: fromNumber || null,
+          to_number: phoneNumber,
+          added_context: addedContext,
+          initiated_by: userId,
+          agent_id: agentId ? parseInt(agentId, 10) : null,
+          lead_name: leadName,
+          lead_id: leadId
+        };
+
+        try {
+          const response = await axios.post(`${baseUrl}/calls`, callPayload, {
+            headers: {
+              'Content-Type': 'application/json',
+              ...(frontendHeader && { 'X-Frontend-ID': frontendHeader }),
+              ...(frontendApiKey && { 'X-API-Key': frontendApiKey })
+            }
+          });
+
+          return res.json({
+            success: true,
+            message: 'Call forwarded to remote API',
+            data: {
+              remoteResponse: response.data,
+              call: callPayload
+            }
+          });
+        } catch (forwardError) {
+          console.error('Error forwarding call data to remote API:', forwardError.message);
+          if (forwardError.response) {
+            console.error('Response status:', forwardError.response.status);
+            console.error('Response data:', forwardError.response.data);
+          }
+
+          return res.status(502).json({
+            success: false,
+            error: 'Failed to forward call to remote API',
+            details: forwardError.response?.data || forwardError.message
+          });
+        }
+      }
+    } catch (error) {
+      console.error('Initiate call error:', error);
+      res.status(500).json({
+        success: false,
+        error: 'Failed to initiate call',
+        message: error.message
+      });
+    }
+  }
+
+  /**
+   * POST /calls/batch
+   * Initiate batch voice calls
+   */
+  async batchInitiateCalls(req, res) {
+    try {
+      const tenantId = req.tenantId || req.user?.tenantId;
+      const userId = req.user?.id;
+
+      const {
+        entries, // Array of {phoneNumber, leadName, leadId, added_context, summary}
+        agentId,
+        voiceId,
+        fromNumber,
+        added_context: globalContext, // Global context for all calls
+        assistantOverrides = {}
+      } = req.body;
+
+      // Validate required fields
+      if (!entries || !Array.isArray(entries) || entries.length === 0) {
+        return res.status(400).json({
+          success: false,
+          error: 'entries array is required and must not be empty'
+        });
+      }
+
+      if (!agentId) {
+        return res.status(400).json({
+          success: false,
+          error: 'agentId is required'
+        });
+      }
+
+      // VAPI agents use VAPI batch API; others forward to legacy BASE_URL /calls/batch
+      if (this.vapiService.shouldUseVAPI(agentId)) {
+        // Initiate batch calls via VAPI
+        const vapiResults = await this.vapiService.batchInitiateCalls({
+          entries,
+          globalContext,
+          agentId,
+          assistantOverrides
+        });
+
+        // Log successful calls
+        const callLogs = await this.callLoggingService.createBatchCallLogs({
+          tenantId,
+          entries,
+          vapiResults,
+          agentId,
+          voiceId,
+          fromNumber,
+          initiatedBy: userId
+        });
+
+        // Compile results
+        const successCount = vapiResults.filter(r => r.success).length;
+        const failureCount = vapiResults.length - successCount;
+
+        return res.json({
+          success: true,
+          message: `Batch calls initiated: ${successCount} successful, ${failureCount} failed`,
+          data: {
+            total: vapiResults.length,
+            successful: successCount,
+            failed: failureCount,
+            results: vapiResults,
+            callLogs: callLogs
+          }
+        });
+      }
+
+      // Non-VAPI agents: forward batch payload to legacy BASE_URL /calls/batch
+      const baseUrl = process.env.BASE_URL;
+      const frontendHeader = process.env.BASE_URL_FRONTEND_HEADER;
+      const frontendApiKey = process.env.BASE_URL_FRONTEND_APIKEY;
+
+      if (!baseUrl) {
+        return res.status(500).json({
+          success: false,
+          error: 'BASE_URL is not configured for batch call forwarding'
+        });
+      }
+
+      // Build entries with per-entry context if available, similar to legacy implementation
+      const formattedEntries = entries.map((entry) => ({
+        to_number: entry.to_number || entry.phoneNumber,
+        lead_name: entry.lead_name || entry.leadName || entry.name || undefined,
+        added_context:
+          (typeof entry.added_context === 'string' && entry.added_context.trim() !== '')
+            ? entry.added_context.trim()
+            : (typeof entry.summary === 'string' && entry.summary.trim() !== '')
+              ? entry.summary.trim()
+              : (typeof globalContext === 'string' && globalContext.trim() !== '')
+                ? globalContext.trim()
+                : undefined
+      }));
+
+      const batchPayload = {
+        voice_id: voiceId || null,
+        from_number: fromNumber || null,
+        agent_id: agentId,
+        entries: formattedEntries,
+        ...(userId && { initiated_by: userId })
+      };
+
+      const remoteEndpoint = `${baseUrl}/calls/batch`;
+
+      try {
+        const response = await axios.post(remoteEndpoint, batchPayload, {
+          headers: {
+            'Content-Type': 'application/json',
+            ...(frontendHeader && { 'X-Frontend-ID': frontendHeader }),
+            ...(frontendApiKey && { 'X-API-Key': frontendApiKey })
+          }
+        });
+
+        return res.status(200).json({
+          success: true,
+          result: response.data || { forwarded: true }
+        });
+      } catch (error) {
+        console.error(
+          'Error forwarding batch call data to remote API:',
+          error?.response?.data || error.message
+        );
+        const status = error?.response?.status || 500;
+        return res.status(status).json({
+          success: false,
+          error: 'Failed to forward batch calls',
+          details: error?.response?.data || error.message
+        });
+      }
+    } catch (error) {
+      console.error('Batch initiate calls error:', error);
+      res.status(500).json({
+        success: false,
+        error: 'Failed to initiate batch calls',
+        message: error.message
+      });
+    }
   }
 
   /**
@@ -255,10 +532,6 @@ class CallController {
     }
   }
 
-  /**
-   * GET /calllogs
-   * Get call logs with filters
-   */
   async getCallLogs(req, res) {
     try {
       const tenantId = req.tenantId || req.user?.tenantId;
@@ -367,74 +640,10 @@ class CallController {
 
     } catch (error) {
       console.error('Get call log by ID error:', error);
-      res.status(500).json({
+      return res.status(500).json({
         success: false,
         error: 'Failed to fetch call log',
         message: error.message
-      });
-    }
-  }
-
-  /**
-   * GET /calllogs/batch/:batch_id
-   * Get call logs for a specific batch
-   */
-  async getBatchCallLogsByBatchId(req, res) {
-    try {
-      const tenantId = req.tenantId || req.user?.tenantId;
-      const { batch_id: batchId } = req.params;
-
-      if (!tenantId) {
-        return res.status(400).json({
-          success: false,
-          error: 'Tenant context required'
-        });
-      }
-
-      if (!batchId || typeof batchId !== 'string') {
-        return res.status(400).json({
-          success: false,
-          error: 'batch_id is required'
-        });
-      }
-
-      const schema = getSchema(req);
-
-      const calls = await this.callModel.getBatchCallsByBatchId(schema, tenantId, batchId);
-
-      const results = (calls || []).map((c, idx) => ({
-        // Prefer the entry's call_log_id (from voice_call_batch_entries),
-        // fall back to vc.id if present
-        call_log_id: c.entry_call_log_id || c.id || null,
-        batch_id: c.batch_id || batchId,
-        batch_entry_id: c.batch_entry_id || null,
-        // Prefer batch entry phone/status/error, then fall back to call log
-        to_number: c.to_phone || c.to_number || null,
-        status: c.entry_status || c.call_status || c.status || 'pending',
-        index: idx,
-        lead_id: c.lead_id || null,
-        added_context: c.added_context || null,
-        room_name: c.room_name || null,
-        dispatch_id: c.dispatch_id || null,
-        error: c.last_error || c.error || null,
-        started_at: c.started_at || null,
-        ended_at: c.ended_at || null,
-        // Only include full call_log object when we have a real log row
-        call_log: c.id ? c : null,
-      }));
-
-      return res.json({
-        success: true,
-        batch_id: batchId,
-        count: results.length,
-        results,
-      });
-    } catch (error) {
-      logger.error('Get batch call logs by batch_id error:', { error });
-      res.status(500).json({
-        success: false,
-        error: 'Failed to fetch batch call logs',
-        message: error.message,
       });
     }
   }

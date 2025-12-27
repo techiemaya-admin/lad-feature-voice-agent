@@ -1,17 +1,12 @@
 /**
- * Voice Agent Routes1.0
+ * Voice Agent Routes
  * 
  * Registers all voice agent endpoints with proper middleware
  * Supports JWT authentication for user-specific endpoints
  */
 
 const express = require('express');
-const { 
-  VoiceAgentController, 
-  CallController, 
-  BatchCallController, 
-  CallInitiationController 
-} = require('../controllers');
+const { VoiceAgentController, CallController } = require('../controllers');
 
 /**
  * Create voice agent router
@@ -28,8 +23,6 @@ function createVoiceAgentRouter(db, options = {}) {
   // Initialize controllers
   const voiceAgentController = new VoiceAgentController(db);
   const callController = new CallController(db);
-  const batchCallController = new BatchCallController(db);
-  const callInitiationController = new CallInitiationController(db);
 
   // Middleware
   const jwtAuth = options.jwtAuth || defaultJwtAuth;
@@ -150,17 +143,7 @@ function createVoiceAgentRouter(db, options = {}) {
   router.post(
     '/calls',
     tenantMiddleware,
-    (req, res) => callInitiationController.initiateCall(req, res)
-  );
-
-  /**
-   * POST /calls/batch
-   * Initiate batch voice calls
-   */
-  router.post(
-    '/calls/batch',
-    tenantMiddleware,
-    (req, res) => batchCallController.batchInitiateCalls(req, res)
+    (req, res) => callController.initiateCall(req, res)
   );
 
   /**
@@ -181,16 +164,6 @@ function createVoiceAgentRouter(db, options = {}) {
     '/calllogs/:call_log_id',
     tenantMiddleware,
     (req, res) => callController.getCallLogById(req, res)
-  );
-
-  /**
-   * GET /calllogs/batch/:batch_id
-   * Get call logs for a specific batch
-   */
-  router.get(
-    '/calllogs/batch/:batch_id',
-    tenantMiddleware,
-    (req, res) => callController.getBatchCallLogsByBatchId(req, res)
   );
 
   /**

@@ -178,6 +178,10 @@ class CallLoggingService {
     return this.callModel.getCallLogs(schema, tenantId, filters, limit);
   }
 
+  async getCallLogs(tenantId, filters = {}, limit = 50) {
+    return this.callModel.getCallLogs(tenantId, filters, limit);
+  }
+
   /**
    * Get call statistics
    * 
