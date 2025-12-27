@@ -7,7 +7,7 @@ class CallInitiationController {
     this.db = db;
   }
 
-  /** 1.0
+  /**
    * Initiate a single voice call
    */
   async initiateCall(req, res) {
