@@ -163,6 +163,10 @@ class CallLoggingService {
     return this.callModel.getRecentCalls(tenantId, 50, filters);
   }
 
+  async getCallLogs(tenantId, filters = {}, limit = 50) {
+    return this.callModel.getCallLogs(tenantId, filters, limit);
+  }
+
   /**
    * Get call statistics
    * 

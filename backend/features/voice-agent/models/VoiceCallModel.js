@@ -96,23 +96,45 @@ class VoiceCallModel {
   async getCallById(callId, tenantId) {
     const query = `
       SELECT 
-        id,
-        tenant_id,
-        voice_id,
-        agent_id,
-        from_number,
-        to_number,
-        status,
-        recording_url,
-        added_context,
-        lead_id,
-        initiated_by,
-        started_at,
-        ended_at,
-        created_at,
-        updated_at
-      FROM voice_calls
-      WHERE id = $1 AND tenant_id = $2
+        vcl.id AS call_log_id,
+        vcl.tenant_id,
+        vcl.initiated_by_user_id,
+        vcl.lead_id,
+        vcl.to_country_code,
+        vcl.to_base_number,
+        vcl.from_number_id,
+        vcl.agent_id,
+        vcl.status,
+        vcl.started_at,
+        vcl.ended_at,
+        vcl.duration_seconds,
+        vcl.recording_url,
+        vcl.transcripts,
+        vcl.cost,
+        vcl.currency,
+        vcl.cost_breakdown,
+        vcl.campaign_id,
+        vcl.campaign_lead_id,
+        vcl.campaign_step_id,
+        vcl.created_at,
+        vcl.updated_at,
+        vcl.direction,
+        vcl.metadata,
+        l.first_name,
+        l.last_name,
+        vcl.cost AS call_cost,
+        vca.analysis
+      FROM lad_dev.voice_call_logs vcl
+      LEFT JOIN lad_dev.leads l ON l.id = vcl.lead_id
+      LEFT JOIN lad_dev.voice_agents va ON va.id = vcl.agent_id AND va.tenant_id = vcl.tenant_id
+      LEFT JOIN LATERAL (
+        SELECT row_to_json(vca_row) AS analysis
+        FROM lad_dev.voice_call_analysis vca_row
+        WHERE vca_row.call_log_id = vcl.id
+        ORDER BY vca_row.created_at DESC NULLS LAST
+        LIMIT 1
+      ) vca ON TRUE
+      WHERE vcl.id = $1 AND vcl.tenant_id = $2
     `;
 
     const result = await this.pool.query(query, [callId, tenantId]);
@@ -129,7 +151,7 @@ class VoiceCallModel {
   async getRecordingUrl(callId, tenantId) {
     const query = `
       SELECT recording_url
-      FROM voice_calls
+      FROM lad_dev.voice_call_logs
       WHERE id = $1 AND tenant_id = $2
     `;
 
@@ -220,6 +242,10 @@ class VoiceCallModel {
    * @returns {Promise<Array>} Call logs
    */
   async getRecentCalls(tenantId, limit = 50, filters = {}) {
+    return this.getCallLogs(tenantId, filters, limit);
+  }
+
+  async getCallLogs(tenantId, filters = {}, limit = 50) {
     const whereClauses = ['tenant_id = $1'];
     const values = [tenantId];
     let paramIndex = 2;
@@ -239,23 +265,52 @@ class VoiceCallModel {
       values.push(filters.startDate);
       paramIndex++;
     }
+    if (filters.userId) {
+      whereClauses.push(`initiated_by_user_id = $${paramIndex}`);
+      values.push(filters.userId);
+      paramIndex++;
+    }
 
     const query = `
       SELECT 
-        id,
-        voice_id,
-        agent_id,
-        from_number,
-        to_number,
-        status,
-        recording_url,
-        started_at,
-        ended_at,
-        lead_id,
-        initiated_by
-      FROM voice_calls
-      WHERE ${whereClauses.join(' AND ')}
-      ORDER BY started_at DESC
+        vcl.id AS call_log_id,
+        vcl.tenant_id,
+        vcl.initiated_by_user_id,
+        vcl.lead_id,
+        vcl.to_country_code,
+        vcl.to_base_number,
+        vcl.from_number_id,
+        vcl.agent_id,
+        vcl.status,
+        vcl.started_at,
+        vcl.ended_at,
+        vcl.duration_seconds,
+        vcl.recording_url,
+        
+        vcl.cost,
+        vcl.currency,
+        
+        vcl.campaign_id,
+        vcl.campaign_lead_id,
+        vcl.campaign_step_id,
+        vcl.direction,
+        vcl.metadata,
+        l.first_name,
+        l.last_name,
+        vcl.cost AS call_cost,
+        vca.analysis
+      FROM lad_dev.voice_call_logs vcl
+      LEFT JOIN lad_dev.leads l ON l.id = vcl.lead_id
+      LEFT JOIN lad_dev.voice_agents va ON va.id = vcl.agent_id AND va.tenant_id = vcl.tenant_id
+      LEFT JOIN LATERAL (
+        SELECT row_to_json(vca_row) AS analysis
+        FROM lad_dev.voice_call_analysis vca_row
+        WHERE vca_row.call_log_id = vcl.id
+        ORDER BY vca_row.created_at DESC NULLS LAST
+        LIMIT 1
+      ) vca ON TRUE
+      WHERE ${whereClauses.map(c => `vcl.${c}`).join(' AND ')}
+      ORDER BY vcl.started_at DESC
       LIMIT $${paramIndex}
     `;
 

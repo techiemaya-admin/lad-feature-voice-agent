@@ -6,7 +6,7 @@
  */
 
 const express = require('express');
-const { VoiceAgentController, CallController } = require('./controllers');
+const { VoiceAgentController, CallController } = require('../controllers');
 
 /**
  * Create voice agent router
@@ -144,6 +144,26 @@ function createVoiceAgentRouter(db, options = {}) {
     '/calls',
     tenantMiddleware,
     (req, res) => callController.initiateCall(req, res)
+  );
+
+  /**
+   * GET /calllogs
+   * Get call logs (for testing / general listing)
+   */
+  router.get(
+    '/calllogs',
+    tenantMiddleware,
+    (req, res) => callController.getCallLogs(req, res)
+  );
+
+  /**
+   * GET /calllogs/:call_log_id
+   * Get a single call log by ID
+   */
+  router.get(
+    '/calllogs/:call_log_id',
+    tenantMiddleware,
+    (req, res) => callController.getCallLogById(req, res)
   );
 
   /**

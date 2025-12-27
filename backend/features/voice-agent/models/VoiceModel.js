@@ -10,7 +10,8 @@
 
 class VoiceModel {
   constructor(db) {
-    this.pool = db;
+    // Prefer injected db pool; fall back to shared db module
+    this.db = db;
   }
 
   /**
@@ -33,15 +34,17 @@ class VoiceModel {
         is_active,
         created_at,
         updated_at
-      FROM voices
+      FROM lad_dev.voice_agent_voices
       WHERE tenant_id = $1 AND is_active = true
       ORDER BY voice_name ASC
     `;
 
-    const result = await this.pool.query(query, [tenantId]);
+    const result = await this.db.query(query, [tenantId]);
     return result.rows;
   }
 
+
+  
   /**
    * Get voice by ID (tenant-isolated)
    * 
@@ -64,11 +67,11 @@ class VoiceModel {
         metadata,
         created_at,
         updated_at
-      FROM voices
+      FROM lad_dev.voice_agent_voices
       WHERE id = $1 AND tenant_id = $2
     `;
 
-    const result = await this.pool.query(query, [voiceId, tenantId]);
+    const result = await this.db.query(query, [voiceId, tenantId]);
     return result.rows[0] || null;
   }
 
@@ -82,11 +85,11 @@ class VoiceModel {
   async getVoiceSampleUrl(voiceId, tenantId) {
     const query = `
       SELECT voice_sample_url
-      FROM voices
+      FROM lad_dev.voice_agent_voices
       WHERE id = $1 AND tenant_id = $2
     `;
 
-    const result = await this.pool.query(query, [voiceId, tenantId]);
+    const result = await this.db.query(query, [voiceId, tenantId]);
     return result.rows[0]?.voice_sample_url || null;
   }
 
@@ -151,7 +154,7 @@ class VoiceModel {
       JSON.stringify(metadata)
     ];
 
-    const result = await this.pool.query(query, values);
+    const result = await this.db.query(query, values);
     return result.rows[0];
   }
 
@@ -195,7 +198,7 @@ class VoiceModel {
     }
 
     const query = `
-      UPDATE voices
+      UPDATE lad_dev.voice_agent_voices
       SET ${setClauses.join(', ')}
       WHERE id = $1 AND tenant_id = $2
       RETURNING 
@@ -211,7 +214,7 @@ class VoiceModel {
         updated_at
     `;
 
-    const result = await this.pool.query(query, values);
+    const result = await this.db.query(query, values);
     return result.rows[0];
   }
 
@@ -224,7 +227,7 @@ class VoiceModel {
    */
   async deleteVoice(voiceId, tenantId) {
     const query = `
-      UPDATE voices
+      UPDATE lad_dev.voice_agent_voices
       SET is_active = false, updated_at = NOW()
       WHERE id = $1 AND tenant_id = $2
     `;
@@ -272,7 +275,7 @@ class VoiceModel {
         language,
         gender,
         created_at
-      FROM voices
+      FROM lad_dev.voice_agent_voices
       WHERE ${whereClauses.join(' AND ')}
       ORDER BY voice_name ASC
     `;

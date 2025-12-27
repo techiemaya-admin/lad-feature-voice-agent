@@ -12,7 +12,7 @@ const PhoneNumberModel = require('./PhoneNumberModel');
 const PhoneResolverModel = require('./PhoneResolverModel');
 
 // Core models (from backend/core/models)
-const { TenantModel, UserModel, MembershipModel } = require('../../../core/models');
+// const { TenantModel, UserModel, MembershipModel } = require('../../../core/models');
 
 module.exports = {
   // Voice agent models
@@ -23,7 +23,7 @@ module.exports = {
   PhoneResolverModel,
   
   // Core models (re-exported for convenience)
-  TenantModel,
-  UserModel,
-  MembershipModel
+  // TenantModel,
+  // UserModel,
+  // MembershipModel
 };

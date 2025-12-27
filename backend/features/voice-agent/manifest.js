@@ -26,6 +26,8 @@ module.exports = {
     '/calls/:id/recording-signed-url',
     '/calls/recent',
     '/calls/stats',
+    '/calllogs',
+    '/calllogs/:call_log_id',
     '/resolve-phones',
     '/update-summary',
     '/settings',
@@ -296,6 +298,32 @@ module.exports = {
         'Generates GCS signed URL via BASE_URL/recordings/calls/:id/signed-url',
         'Returns publicly accessible URL valid for specified hours'
       ]
+    },
+    {
+      method: 'GET',
+      path: '/calllogs',
+      description: 'Get list of call logs',
+      auth: true,
+      params: {
+        query: {
+          page: 'number (optional, default: 1)',
+          limit: 'number (optional, default: 20)',
+          status: 'string (optional, filter by status)',
+          date_from: 'string (optional, ISO date)',
+          date_to: 'string (optional, ISO date)'
+        }
+      }
+    },
+    {
+      method: 'GET',
+      path: '/calllogs/:call_log_id',
+      description: 'Get specific call log by ID',
+      auth: true,
+      params: {
+        path: {
+          call_log_id: 'string (required, call log ID)'
+        }
+      }
     },
     {
       method: 'POST',

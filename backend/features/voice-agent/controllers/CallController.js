@@ -4,14 +4,16 @@
  * Handles voice call initiation, batch calling, and call management
  * Integrates with VAPI service and call logging
  */
-
-const { VoiceCallModel, PhoneResolverModel } = require('../models');
+require('dotenv')
+const axios = require('axios');
+const { VoiceCallModel, PhoneResolverModel, VoiceAgentModel } = require('../models');
 const { VAPIService, CallLoggingService, RecordingService } = require('../services');
 
 class CallController {
   constructor(db) {
     this.callModel = new VoiceCallModel(db);
     this.phoneResolver = new PhoneResolverModel(db);
+    this.agentModel = new VoiceAgentModel(db);
     this.vapiService = new VAPIService();
     this.callLoggingService = new CallLoggingService(db);
     this.recordingService = new RecordingService();
@@ -89,12 +91,59 @@ class CallController {
           }
         });
       } else {
-        // Custom agent (non-VAPI) - implement custom logic here
-        return res.status(501).json({
-          success: false,
-          error: 'Custom agent calls not yet implemented',
-          message: 'Only VAPI agents (agent_id "24" or "VAPI") are currently supported'
-        });
+        // Custom agent (non-VAPI) - forward to legacy BASE_URL /calls endpoint
+        const baseUrl = process.env.BASE_URL;
+        const frontendHeader = process.env.BASE_URL_FRONTEND_HEADER;
+        const frontendApiKey = process.env.BASE_URL_FRONTEND_APIKEY;
+
+        if (!baseUrl) {
+          return res.status(500).json({
+            success: false,
+            error: 'BASE_URL is not configured for call forwarding'
+          });
+        }
+
+        const callPayload = {
+          voice_id: voiceId || null,
+          from_number: fromNumber || null,
+          to_number: phoneNumber,
+          added_context: addedContext,
+          initiated_by: userId,
+          agent_id: agentId ? parseInt(agentId, 10) : null,
+          lead_name: leadName,
+          lead_id: leadId
+        };
+
+        try {
+          const response = await axios.post(`${baseUrl}/calls`, callPayload, {
+            headers: {
+              'Content-Type': 'application/json',
+              ...(frontendHeader && { 'X-Frontend-ID': frontendHeader }),
+              ...(frontendApiKey && { 'X-API-Key': frontendApiKey })
+            }
+          });
+
+          return res.json({
+            success: true,
+            message: 'Call forwarded to remote API',
+            data: {
+              remoteResponse: response.data,
+              call: callPayload
+            }
+          });
+        } catch (forwardError) {
+          console.error('Error forwarding call data to remote API:', forwardError.message);
+          if (forwardError.response) {
+            console.error('Response status:', forwardError.response.status);
+            console.error('Response data:', forwardError.response.data);
+          }
+
+          return res.status(502).json({
+            success: false,
+            error: 'Failed to forward call to remote API',
+            details: forwardError.response?.data || forwardError.message
+          });
+        }
       }
     } catch (error) {
       console.error('Initiate call error:', error);
@@ -139,48 +188,105 @@ class CallController {
         });
       }
 
-      // Check if should use VAPI
-      if (!this.vapiService.shouldUseVAPI(agentId)) {
-        return res.status(501).json({
-          success: false,
-          error: 'Only VAPI agents are supported for batch calls'
+      // VAPI agents use VAPI batch API; others forward to legacy BASE_URL /calls/batch
+      if (this.vapiService.shouldUseVAPI(agentId)) {
+        // Initiate batch calls via VAPI
+        const vapiResults = await this.vapiService.batchInitiateCalls({
+          entries,
+          globalContext,
+          agentId,
+          assistantOverrides
+        });
+
+        // Log successful calls
+        const callLogs = await this.callLoggingService.createBatchCallLogs({
+          tenantId,
+          entries,
+          vapiResults,
+          agentId,
+          voiceId,
+          fromNumber,
+          initiatedBy: userId
+        });
+
+        // Compile results
+        const successCount = vapiResults.filter(r => r.success).length;
+        const failureCount = vapiResults.length - successCount;
+
+        return res.json({
+          success: true,
+          message: `Batch calls initiated: ${successCount} successful, ${failureCount} failed`,
+          data: {
+            total: vapiResults.length,
+            successful: successCount,
+            failed: failureCount,
+            results: vapiResults,
+            callLogs: callLogs
+          }
         });
       }
 
-      // Initiate batch calls via VAPI
-      const vapiResults = await this.vapiService.batchInitiateCalls({
-        entries,
-        globalContext,
-        agentId,
-        assistantOverrides
-      });
+      // Non-VAPI agents: forward batch payload to legacy BASE_URL /calls/batch
+      const baseUrl = process.env.BASE_URL;
+      const frontendHeader = process.env.BASE_URL_FRONTEND_HEADER;
+      const frontendApiKey = process.env.BASE_URL_FRONTEND_APIKEY;
 
-      // Log successful calls
-      const callLogs = await this.callLoggingService.createBatchCallLogs({
-        tenantId,
-        entries,
-        vapiResults,
-        agentId,
-        voiceId,
-        fromNumber,
-        initiatedBy: userId
-      });
+      if (!baseUrl) {
+        return res.status(500).json({
+          success: false,
+          error: 'BASE_URL is not configured for batch call forwarding'
+        });
+      }
 
-      // Compile results
-      const successCount = vapiResults.filter(r => r.success).length;
-      const failureCount = vapiResults.length - successCount;
+      // Build entries with per-entry context if available, similar to legacy implementation
+      const formattedEntries = entries.map((entry) => ({
+        to_number: entry.to_number || entry.phoneNumber,
+        lead_name: entry.lead_name || entry.leadName || entry.name || undefined,
+        added_context:
+          (typeof entry.added_context === 'string' && entry.added_context.trim() !== '')
+            ? entry.added_context.trim()
+            : (typeof entry.summary === 'string' && entry.summary.trim() !== '')
+              ? entry.summary.trim()
+              : (typeof globalContext === 'string' && globalContext.trim() !== '')
+                ? globalContext.trim()
+                : undefined
+      }));
 
-      res.json({
-        success: true,
-        message: `Batch calls initiated: ${successCount} successful, ${failureCount} failed`,
-        data: {
-          total: vapiResults.length,
-          successful: successCount,
-          failed: failureCount,
-          results: vapiResults,
-          callLogs: callLogs
-        }
-      });
+      const batchPayload = {
+        voice_id: voiceId || null,
+        from_number: fromNumber || null,
+        agent_id: agentId,
+        entries: formattedEntries,
+        ...(userId && { initiated_by: userId })
+      };
+
+      const remoteEndpoint = `${baseUrl}/calls/batch`;
+
+      try {
+        const response = await axios.post(remoteEndpoint, batchPayload, {
+          headers: {
+            'Content-Type': 'application/json',
+            ...(frontendHeader && { 'X-Frontend-ID': frontendHeader }),
+            ...(frontendApiKey && { 'X-API-Key': frontendApiKey })
+          }
+        });
+
+        return res.status(200).json({
+          success: true,
+          result: response.data || { forwarded: true }
+        });
+      } catch (error) {
+        console.error(
+          'Error forwarding batch call data to remote API:',
+          error?.response?.data || error.message
+        );
+        const status = error?.response?.status || 500;
+        return res.status(status).json({
+          success: false,
+          error: 'Failed to forward batch calls',
+          details: error?.response?.data || error.message
+        });
+      }
     } catch (error) {
       console.error('Batch initiate calls error:', error);
       res.status(500).json({
@@ -198,54 +304,55 @@ class CallController {
   async getCallRecordingSignedUrl(req, res) {
     try {
       const { id } = req.params;
-      const tenantId = req.tenantId || req.user?.tenantId;
-      const expirationHours = parseInt(req.query.expiration_hours) || 96;
-
-      // Get call log
-      const call = await this.callModel.getCallById(id, tenantId);
-
-      if (!call) {
-        return res.status(404).json({
+      if (!id) {
+        return res.status(400).json({
           success: false,
-          error: 'Call not found'
+          error: 'id is required'
         });
       }
 
-      if (!call.recording_url) {
-        return res.status(404).json({
-          success: false,
-          error: 'Recording not available for this call'
-        });
-      }
+      const baseUrl = process.env.BASE_URL;
+      const frontendHeader = process.env.BASE_URL_FRONTEND_HEADER;
+      const frontendApiKey = process.env.BASE_URL_FRONTEND_APIKEY;
 
-      // Get signed URL
-      const result = await this.recordingService.getRecordingSignedUrl(
-        id,
-        expirationHours
-      );
-
-      if (!result.success) {
+      if (!baseUrl) {
         return res.status(500).json({
           success: false,
-          error: result.error
+          error: 'BASE_URL is not configured for recording signed URLs'
         });
       }
 
-      res.json({
-        success: true,
-        data: {
-          call_id: id,
-          signed_url: result.signedUrl,
-          expires_at: result.expiresAt,
-          expiration_hours: expirationHours
+      const signingEndpoint = `${baseUrl}/recordings/calls/${id}/signed-url`;
+
+      const response = await axios.get(signingEndpoint, {
+        headers: {
+          'Content-Type': 'application/json',
+          ...(frontendHeader && { 'X-Frontend-ID': frontendHeader }),
+          ...(frontendApiKey && { 'X-API-Key': frontendApiKey })
         }
       });
+
+      const signedUrl =
+        response?.data?.signed_url ||
+        response?.data?.url ||
+        response?.data;
+
+      if (!signedUrl || typeof signedUrl !== 'string') {
+        return res.status(502).json({
+          success: false,
+          error: 'Failed to obtain signed URL from signing service'
+        });
+      }
+
+      return res.status(200).json({
+        success: true,
+        signed_url: signedUrl
+      });
     } catch (error) {
-      console.error('Get call recording signed URL error:', error);
-      res.status(500).json({
+      console.error('Get call recording signed URL error:', error?.response?.data || error.message);
+      return res.status(500).json({
         success: false,
-        error: 'Failed to generate signed URL',
-        message: error.message
+        error: 'Failed to generate signed URL'
       });
     }
   }
@@ -368,6 +475,17 @@ class CallController {
       if (agent_id) filters.agentId = agent_id;
       if (start_date) filters.startDate = new Date(start_date);
 
+      // Role & capability based access control
+      const user = req.user;
+      const isAdmin = user?.role === 'admin';
+      const capabilities = Array.isArray(user?.capabilities) ? user.capabilities : [];
+
+      // If user has leads_view_assigned capability and is not admin,
+      // restrict to calls initiated by this user only
+      if (!isAdmin && capabilities.includes('leads_view_assigned') && user?.id) {
+        filters.userId = user.id;
+      }
+
       const calls = await this.callLoggingService.getRecentCalls(tenantId, filters);
 
       res.json({
@@ -409,6 +527,122 @@ class CallController {
       res.status(500).json({
         success: false,
         error: 'Failed to fetch call statistics',
+        message: error.message
+      });
+    }
+  }
+
+  async getCallLogs(req, res) {
+    try {
+      const tenantId = req.tenantId || req.user?.tenantId;
+      const { status, agent_id, start_date, limit } = req.query;
+
+      const filters = {};
+      if (status) filters.status = status;
+      if (agent_id) filters.agentId = agent_id;
+      if (start_date) filters.startDate = new Date(start_date);
+
+      const user = req.user;
+      const isAdmin = user?.role === 'admin';
+      const capabilities = Array.isArray(user?.capabilities) ? user.capabilities : [];
+
+      if (!isAdmin && capabilities.includes('leads_view_assigned') && user?.id) {
+        filters.userId = user.id;
+      }
+
+      const parsedLimit = limit ? parseInt(limit, 10) : 50;
+      const calls = await this.callLoggingService.getCallLogs(tenantId, filters, parsedLimit);
+
+      res.json({
+        success: true,
+        data: calls,
+        count: calls.length
+      });
+    } catch (error) {
+      console.error('Get call logs error:', error);
+      res.status(500).json({
+        success: false,
+        error: 'Failed to fetch call logs',
+        message: error.message
+      });
+    }
+  }
+
+  /**
+   * GET /calllogs/:call_log_id
+   * Get a single call log by ID with signed recording URL
+   */
+  async getCallLogById(req, res) {
+    try {
+      const tenantId = req.tenantId || req.user?.tenantId;
+      const { call_log_id } = req.params;
+
+      if (!call_log_id) {
+        return res.status(400).json({
+          success: false,
+          error: 'call_log_id parameter is required'
+        });
+      }
+
+      const callLog = await this.callLoggingService.getCallLog(call_log_id, tenantId);
+
+      if (!callLog) {
+        return res.status(404).json({
+          success: false,
+          error: 'Call log not found'
+        });
+      }
+
+      // Check if user has access to this call log
+      const user = req.user;
+      const isAdmin = user?.role === 'admin';
+      const capabilities = Array.isArray(user?.capabilities) ? user.capabilities : [];
+
+      // If user is not admin and has leads_view_assigned capability,
+      // verify they initiated this call
+      if (!isAdmin && capabilities.includes('leads_view_assigned') && user?.id) {
+        if (callLog.initiated_by_user_id !== user.id) {
+          return res.status(403).json({
+            success: false,
+            error: 'You do not have permission to view this call log'
+          });
+        }
+      }
+
+      // If there's a recording URL, get a signed URL for it
+      if (callLog.recording_url) {
+        try {
+          const signingEndpoint = `${process.env.BASE_URL}/recordings/calls/${callLog.recording_url}/signed-url`;
+          const response = await axios.get(signingEndpoint, { 
+            headers: { 
+              'Content-Type': 'application/json', 
+              'X-Frontend-ID': process.env.BASE_URL_FRONTEND_HEADER, 
+              'X-API-Key': process.env.BASE_URL_FRONTEND_APIKEY 
+            } 
+          });
+
+          const signedUrl = response?.data?.signed_url || response?.data?.url || response?.data;
+          
+          if (signedUrl && typeof signedUrl === 'string') {
+            callLog.signed_recording_url = signedUrl;
+          }
+        } catch (error) {
+          console.error('Error generating signed URL for call recording:', error);
+          // Don't fail the request if we can't get a signed URL
+          // The client can still try to access the recording URL directly if needed
+        }
+      }
+
+      return res.json({
+        success: true,
+        data: callLog
+      });
+
+    } catch (error) {
+      console.error('Get call log by ID error:', error);
+      return res.status(500).json({
+        success: false,
+        error: 'Failed to fetch call log',
         message: error.message
       });
     }

@@ -149,10 +149,10 @@ class VoiceAgentController {
         });
       }
 
-      // Get voice details
-      const voice = await this.voiceModel.getVoiceById(agent.voice_id, tenantId);
-      
-      if (!voice || !voice.voice_sample_url) {
+      // Get voice sample URL for this agent's voice
+      const voiceSampleUrl = await this.voiceModel.getVoiceSampleUrl(agent.voice_id, tenantId);
+
+      if (!voiceSampleUrl) {
         return res.status(404).json({
           success: false,
           error: 'Voice sample not found for this agent'
@@ -162,7 +162,7 @@ class VoiceAgentController {
       // Get signed URL
       const result = await this.recordingService.getAgentVoiceSampleSignedUrl(
         agent.voice_id,
-        voice.voice_sample_url,
+        voiceSampleUrl,
         expirationHours
       );
 
@@ -201,6 +201,13 @@ class VoiceAgentController {
   async getAllAgents(req, res) {
     try {
       const tenantId = req.tenantId || req.user?.tenantId;
+
+      console.log('[/api/voiceagent/all] request context:', {
+        user: req.user,
+        tenantId,
+        headersTenantId: req.headers['x-tenant-id'],
+        queryTenantId: req.query.tenant_id,
+      });
 
       const agents = await this.agentModel.getAllAgents(tenantId);
 

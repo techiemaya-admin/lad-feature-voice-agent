@@ -10,7 +10,8 @@
 
 class PhoneNumberModel {
   constructor(db) {
-    this.pool = db;
+    // Prefer injected db pool; fall back to shared db module
+    this.db = db;
   }
 
   /**
@@ -21,22 +22,12 @@ class PhoneNumberModel {
    */
   async getAllPhoneNumbers(tenantId) {
     const query = `
-      SELECT 
-        id,
-        tenant_id,
-        phone_number,
-        provider,
-        number_type,
-        capabilities,
-        is_active,
-        created_at,
-        updated_at
-      FROM phone_numbers
-      WHERE tenant_id = $1 AND is_active = true
-      ORDER BY phone_number ASC
+      SELECT *
+      FROM lad_dev.voice_agent_numbers
+      WHERE tenant_id = $1 ORDER BY created_at DESC
     `;
 
-    const result = await this.pool.query(query, [tenantId]);
+    const result = await this.db.query(query, [tenantId]);
     return result.rows;
   }
 
@@ -64,7 +55,7 @@ class PhoneNumberModel {
       WHERE id = $1 AND tenant_id = $2
     `;
 
-    const result = await this.pool.query(query, [numberId, tenantId]);
+    const result = await this.db.query(query, [numberId, tenantId]);
     return result.rows[0] || null;
   }
 
@@ -89,7 +80,7 @@ class PhoneNumberModel {
       WHERE phone_number = $1 AND tenant_id = $2
     `;
 
-    const result = await this.pool.query(query, [phoneNumber, tenantId]);
+    const result = await this.db.query(query, [phoneNumber, tenantId]);
     return result.rows[0] || null;
   }
 
@@ -104,11 +95,13 @@ class PhoneNumberModel {
     const query = `
       SELECT 
         id,
-        phone_number,
+        country_code,
+        base_number,
+        status,
         provider,
         number_type,
         capabilities
-      FROM phone_numbers
+      FROM lad_dev.voice_agent_numbers
       WHERE tenant_id = $1 
         AND is_active = true
       ORDER BY phone_number ASC
@@ -117,7 +110,7 @@ class PhoneNumberModel {
     // Note: If you have user-specific number permissions, add a JOIN to user_number_permissions table
     // For now, all active numbers are available to all users in the tenant
 
-    const result = await this.pool.query(query, [tenantId]);
+    const result = await this.db.query(query, [tenantId]);
     return result.rows;
   }
 
@@ -172,7 +165,7 @@ class PhoneNumberModel {
       JSON.stringify(metadata)
     ];
 
-    const result = await this.pool.query(query, values);
+    const result = await this.db.query(query, values);
     return result.rows[0];
   }
 
@@ -279,7 +272,7 @@ class PhoneNumberModel {
       ORDER BY phone_number ASC
     `;
 
-    const result = await this.pool.query(query, [tenantId, capability]);
+    const result = await this.db.query(query, [tenantId, capability]);
     return result.rows;
   }
 
