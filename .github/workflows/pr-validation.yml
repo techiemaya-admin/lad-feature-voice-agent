@@ -20,27 +20,31 @@ jobs:
         uses: actions/setup-node@v4
         with:
           node-version: '18'
-          cache: 'npm'
-
-      - name: Install dependencies
-        run: npm ci || echo "No package.json found, skipping npm ci"
+          
+      - name: Install backend dependencies
+        run: |
+          if [ -f backend/package.json ]; then
+            cd backend && npm ci
+          else
+            echo "No backend package.json found, skipping"
+          fi
 
       - name: Check for required files
         run: |
           echo "Checking required files..."
-          test -f backend/manifest.js || (echo "❌ backend/manifest.js is required" && exit 1)
-          test -d backend/services || (echo "❌ backend/services directory is required" && exit 1)
-          test -d backend/routes || (echo "❌ backend/routes directory is required" && exit 1)
+          test -f backend/features/voice-agent/manifest.js || (echo "❌ backend/features/voice-agent/manifest.js is required" && exit 1)
+          test -d backend/features/voice-agent/services || (echo "❌ backend/features/voice-agent/services directory is required" && exit 1)
+          test -d backend/features/voice-agent/routes || (echo "❌ backend/features/voice-agent/routes directory is required" && exit 1)
           echo "✅ All required files present"
 
       - name: Validate backend structure
         run: |
           echo "Validating backend structure..."
           
-          # Check for key backend files
+          # Check for key backend files (LAD architecture)
           files=(
-            "backend/routes/index.js"
-            "backend/manifest.js"
+            "backend/features/voice-agent/routes/index.js"
+            "backend/features/voice-agent/manifest.js"
           )
           
           for file in "${files[@]}"; do
