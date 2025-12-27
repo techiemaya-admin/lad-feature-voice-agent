@@ -45,3 +45,5 @@ coverage/
 .cache/
 db.js
 server.js
+package-lock.json
+package.json
