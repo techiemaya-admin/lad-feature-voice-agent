@@ -6,7 +6,12 @@
  */
 
 const express = require('express');
-const { VoiceAgentController, CallController } = require('../controllers');
+const { 
+  VoiceAgentController, 
+  CallController, 
+  BatchCallController, 
+  CallInitiationController 
+} = require('../controllers');
 
 /**
  * Create voice agent router
@@ -23,6 +28,8 @@ function createVoiceAgentRouter(db, options = {}) {
   // Initialize controllers
   const voiceAgentController = new VoiceAgentController(db);
   const callController = new CallController(db);
+  const batchCallController = new BatchCallController(db);
+  const callInitiationController = new CallInitiationController(db);
 
   // Middleware
   const jwtAuth = options.jwtAuth || defaultJwtAuth;
@@ -143,7 +150,17 @@ function createVoiceAgentRouter(db, options = {}) {
   router.post(
     '/calls',
     tenantMiddleware,
-    (req, res) => callController.initiateCall(req, res)
+    (req, res) => callInitiationController.initiateCall(req, res)
+  );
+
+  /**
+   * POST /calls/batch
+   * Initiate batch voice calls
+   */
+  router.post(
+    '/calls/batch',
+    tenantMiddleware,
+    (req, res) => batchCallController.batchInitiateCalls(req, res)
   );
 
   /**
