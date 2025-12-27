@@ -276,7 +276,7 @@ class VoiceModel {
         language,
         gender,
         created_at
-      FROM lad_dev.voice_agent_voices
+      FROM ${schema}.voice_agent_voices
       WHERE ${whereClauses.join(' AND ')}
       ORDER BY voice_name ASC
     `;
