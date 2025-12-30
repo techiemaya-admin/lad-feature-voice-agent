@@ -187,7 +187,7 @@ class VoiceCallModel {
     }
 
     const query = `
-      UPDATE ${schema}.voice_calls
+      UPDATE ${schema}.voice_call_logs
       SET ${setClauses.join(', ')}
       WHERE id = $1 AND tenant_id = $2
       RETURNING 
@@ -247,30 +247,34 @@ class VoiceCallModel {
   }
 
   async getCallLogs(schema, tenantId, filters = {}, limit = 50) {
-    const whereClauses = ['tenant_id = $1'];
+  const whereClauses = ['vcl.tenant_id = $1'];
     const values = [tenantId];
     let paramIndex = 2;
 
-    if (filters.status) {
-      whereClauses.push(`status = $${paramIndex}`);
-      values.push(filters.status);
-      paramIndex++;
-    }
-    if (filters.agentId) {
-      whereClauses.push(`agent_id = $${paramIndex}`);
-      values.push(filters.agentId);
-      paramIndex++;
-    }
-    if (filters.startDate) {
-      whereClauses.push(`started_at >= $${paramIndex}`);
-      values.push(filters.startDate);
-      paramIndex++;
-    }
-    if (filters.userId) {
-      whereClauses.push(`initiated_by_user_id = $${paramIndex}`);
-      values.push(filters.userId);
-      paramIndex++;
-    }
+  if (filters.status) {
+    whereClauses.push(`vcl.status = $${paramIndex}`);
+    values.push(filters.status);
+    paramIndex++;
+  }
+
+  if (filters.agentId) {
+    whereClauses.push(`vcl.agent_id = $${paramIndex}`);
+    values.push(filters.agentId);
+    paramIndex++;
+  }
+
+  if (filters.startDate) {
+    whereClauses.push(`vcl.started_at >= $${paramIndex}`);
+    values.push(filters.startDate);
+    paramIndex++;
+  }
+
+  // ⭐ CORE REQUIREMENT
+  if (filters.userId) {
+    whereClauses.push(`vcl.initiated_by_user_id = $${paramIndex}`);
+    values.push(filters.userId);
+    paramIndex++;
+  }
 
     const query = `
       SELECT 
@@ -282,6 +286,7 @@ class VoiceCallModel {
         vcl.to_base_number,
         vcl.from_number_id,
         vcl.agent_id,
+    va.name AS agent_name,
         vcl.status,
         vcl.started_at,
         vcl.ended_at,
@@ -301,24 +306,28 @@ class VoiceCallModel {
         vcl.cost AS call_cost,
         vca.analysis
       FROM ${schema}.voice_call_logs vcl
-      LEFT JOIN ${schema}.leads l ON l.id = vcl.lead_id
-      LEFT JOIN ${schema}.voice_agents va ON va.id = vcl.agent_id AND va.tenant_id = vcl.tenant_id
-      LEFT JOIN LATERAL (
-        SELECT row_to_json(vca_row) AS analysis
-        FROM ${schema}.voice_call_analysis vca_row
-        WHERE vca_row.call_log_id = vcl.id
-        ORDER BY vca_row.created_at DESC NULLS LAST
-        LIMIT 1
-      ) vca ON TRUE
-      WHERE ${whereClauses.map(c => `vcl.${c}`).join(' AND ')}
-      ORDER BY vcl.started_at DESC
-      LIMIT $${paramIndex}
-    `;
+LEFT JOIN ${schema}.leads l 
+    ON l.id = vcl.lead_id
+LEFT JOIN ${schema}.voice_agents va 
+    ON va.id = vcl.agent_id
+   AND va.tenant_id = vcl.tenant_id
+LEFT JOIN LATERAL (
+    SELECT row_to_json(vca_row) AS analysis
+    FROM ${schema}.voice_call_analysis vca_row
+    WHERE vca_row.call_log_id = vcl.id
+    ORDER BY vca_row.created_at DESC NULLS LAST
+    LIMIT 1
+) vca ON TRUE
+WHERE ${whereClauses.join(' AND ')}
+ORDER BY vcl.started_at DESC
+LIMIT $${paramIndex};
+`;
 
-    values.push(limit);
-    const result = await this.pool.query(query, values);
-    return result.rows;
-  }
+  values.push(limit);
+
+  const result = await this.pool.query(query, values);
+  return result.rows;
+}
 
   /**
    * Get call statistics for tenant
