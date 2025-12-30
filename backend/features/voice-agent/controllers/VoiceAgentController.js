@@ -34,7 +34,7 @@ class VoiceAgentController {
       const userId = req.user.id; // From JWT middleware
       const tenantId = req.user.tenantId; // From JWT middleware
 
-      const agents = await this.agentModel.getAvailableAgentsForUser(userId, tenantId);
+      const agents = await this.agentModel.getAvailableAgentsForUser(schema, userId, tenantId);
 
       res.json({
         success: true,
@@ -61,7 +61,7 @@ class VoiceAgentController {
       const userId = req.user.id;
       const tenantId = req.user.tenantId;
 
-      const numbers = await this.phoneModel.getAvailableNumbersForUser(userId, tenantId);
+      const numbers = await this.phoneModel.getAvailableNumbersForUser(schema, userId, tenantId);
 
       res.json({
         success: true,
@@ -136,6 +136,9 @@ class VoiceAgentController {
    * GET /agents/:agentId/sample-signed-url
    * Get signed URL for agent's voice sample
    * JWT Auth Required
+   * 
+   * Optimized: Uses getAvailableAgentsForUser which already includes voice_sample_url
+   * to avoid multiple database queries
    */
   async getAgentVoiceSampleSignedUrl(req, res) {
     try {
@@ -143,8 +146,10 @@ class VoiceAgentController {
       const tenantId = req.user.tenantId;
       const expirationHours = parseInt(req.query.expiration_hours) || 96;
 
-      // Get agent details
-      const agent = await this.agentModel.getAgentById(agentId, tenantId);
+      // Optimize: Use getAvailableAgentsForUser which already includes voice_sample_url
+      // This avoids multiple database queries (getAgentById + getVoiceSampleUrl)
+      const agents = await this.agentModel.getAvailableAgentsForUser(schema, userId, tenantId);
+      const agent = agents.find(a => String(a.agent_id) === String(agentId));
       
       if (!agent) {
         return res.status(404).json({
@@ -153,8 +158,8 @@ class VoiceAgentController {
         });
       }
 
-      // Get voice sample URL for this agent's voice
-      const voiceSampleUrl = await this.voiceModel.getVoiceSampleUrl(agent.voice_id, tenantId);
+      // Use voice_sample_url directly from agent (already loaded from view)
+      const voiceSampleUrl = agent.voice_sample_url;
 
       if (!voiceSampleUrl) {
         return res.status(404).json({
@@ -173,12 +178,22 @@ class VoiceAgentController {
       if (!result.success) {
         return res.status(500).json({
           success: false,
-          error: result.error
+          error: result.error || 'Failed to generate signed URL',
+          message: result.error
         });
       }
 
+      // LAD Standard: Return snake_case for API/HTTP response
+      // Frontend expects signed_url at top level
+      // Add cache headers for signed URLs (valid for 96 hours, cache for 1 hour)
+      res.set({
+        'Cache-Control': 'public, max-age=3600', // Cache for 1 hour
+        'Expires': new Date(Date.now() + 3600000).toUTCString()
+      });
+      
       res.json({
         success: true,
+        signed_url: result.signedUrl,  // Top-level for frontend compatibility
         data: {
           agent_id: agentId,
           agent_name: agent.agent_name,
@@ -192,7 +207,7 @@ class VoiceAgentController {
       logger.error('Get agent voice sample signed URL error:', error);
       res.status(500).json({
         success: false,
-        error: 'Failed to generate signed URL',
+        error: 'Failed to get voice sample signed URL',
         message: error.message
       });
     }
@@ -209,11 +224,12 @@ class VoiceAgentController {
       logger.info('[/api/voiceagent/all] request context:', {
         user: req.user,
         tenantId,
+        schema,
         headersTenantId: req.headers['x-tenant-id'],
         queryTenantId: req.query.tenant_id,
       });
 
-      const agents = await this.agentModel.getAllAgents(tenantId);
+      const agents = await this.agentModel.getAllAgents(schema, tenantId);
 
       res.json({
         success: true,

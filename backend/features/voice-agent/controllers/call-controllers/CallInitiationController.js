@@ -58,8 +58,8 @@ class CallInitiationController {
       } else {
         // Legacy call handling
         const baseUrl = process.env.BASE_URL;
-        const frontendHeader = req.headers['x-frontend-id'];
-        const frontendApiKey = process.env.FRONTEND_API_KEY;
+        const frontendHeader = process.env.BASE_URL_FRONTEND_HEADER || req.headers['x-frontend-id'];
+        const frontendApiKey = process.env.BASE_URL_FRONTEND_APIKEY || process.env.FRONTEND_API_KEY;
 
         if (!baseUrl) {
           return res.status(500).json({
