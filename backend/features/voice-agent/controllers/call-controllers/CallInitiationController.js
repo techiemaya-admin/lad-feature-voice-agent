@@ -11,9 +11,10 @@ class CallInitiationController {
     this.agentModel = new VoiceAgentModel(db);
   }
 
-  /** 1.0
+  /**
    * Initiate a single voice call
-   */
+   * 1.0
+  */
   async initiateCall(req, res) {
     try {
       const tenantId = req.tenantId || req.user?.tenantId;
