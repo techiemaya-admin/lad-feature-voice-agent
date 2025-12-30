@@ -81,7 +81,7 @@ class BatchCallController {
         };
 
         try {
-          const response = await axios.post(`${baseUrl}/batch/trigger-batch-call`, batchPayload, {
+          const response = await axios.post(`${baseUrl}/calls/batch`, batchPayload, {
             headers: {
               'Content-Type': 'application/json',
               ...(frontendHeader && { 'X-Frontend-ID': frontendHeader }),
