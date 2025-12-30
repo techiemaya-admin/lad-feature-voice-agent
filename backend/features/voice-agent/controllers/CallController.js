@@ -1,5 +1,5 @@
 /**
- * Call Controller 1.0
+ * Call Controller1.0
  * 
  * Handles call management, call logs, and call-related operations
  * Note: Call initiation and batch calls have been moved to separate controllers
@@ -8,6 +8,7 @@ require('dotenv')
 const axios = require('axios');
 const { VoiceCallModel, PhoneResolverModel, VoiceAgentModel } = require('../models');
 const { VAPIService, CallLoggingService, RecordingService } = require('../services');
+const { getSchema } = require('../../../core/utils/schemaHelper');
 
 class CallController {
   constructor(db) {
@@ -370,6 +371,70 @@ class CallController {
         success: false,
         error: 'Failed to fetch call log',
         message: error.message
+      });
+    }
+  }
+
+  /**
+   * GET /calllogs/batch/:batch_id
+   * Get call logs for a specific batch
+   */
+  async getBatchCallLogsByBatchId(req, res) {
+    try {
+      const tenantId = req.tenantId || req.user?.tenantId;
+      const { batch_id: batchId } = req.params;
+
+      if (!tenantId) {
+        return res.status(400).json({
+          success: false,
+          error: 'Tenant context required'
+        });
+      }
+
+      if (!batchId || typeof batchId !== 'string') {
+        return res.status(400).json({
+          success: false,
+          error: 'batch_id is required'
+        });
+      }
+
+      const schema = getSchema(req);
+
+      const calls = await this.callModel.getBatchCallsByBatchId(schema, tenantId, batchId);
+
+      const results = (calls || []).map((c, idx) => ({
+        // Prefer the entry's call_log_id (from voice_call_batch_entries),
+        // fall back to vc.id if present
+        call_log_id: c.entry_call_log_id || c.id || null,
+        batch_id: c.batch_id || batchId,
+        batch_entry_id: c.batch_entry_id || null,
+        // Prefer batch entry phone/status/error, then fall back to call log
+        to_number: c.to_phone || c.to_number || null,
+        status: c.entry_status || c.call_status || c.status || 'pending',
+        index: idx,
+        lead_id: c.lead_id || null,
+        added_context: c.added_context || null,
+        room_name: c.room_name || null,
+        dispatch_id: c.dispatch_id || null,
+        error: c.last_error || c.error || null,
+        started_at: c.started_at || null,
+        ended_at: c.ended_at || null,
+        // Only include full call_log object when we have a real log row
+        call_log: c.id ? c : null,
+      }));
+
+      return res.json({
+        success: true,
+        batch_id: batchId,
+        count: results.length,
+        results,
+      });
+    } catch (error) {
+      logger.error('Get batch call logs by batch_id error:', { error });
+      res.status(500).json({
+        success: false,
+        error: 'Failed to fetch batch call logs',
+        message: error.message,
       });
     }
   }
