@@ -26,7 +26,6 @@ class CallInitiationController {
         agent_id,
         from_number,
         lead_name,
-        lead_id,
         voice_id,
         added_context,
         assistant_overrides = {}
@@ -37,7 +36,6 @@ class CallInitiationController {
       const agentId = agent_id;
       const fromNumber = from_number;
       const leadName = lead_name;
-      const leadId = lead_id;
       const voiceId = voice_id;
       const addedContext = added_context;
       const assistantOverrides = assistant_overrides;
@@ -56,7 +54,6 @@ class CallInitiationController {
         const result = await this.vapiService.initiateCall({
           phoneNumber,
           leadName,
-          leadId,
           agentId,
           voiceId,
           fromNumber,
@@ -129,8 +126,7 @@ class CallInitiationController {
     try {
       logger.info('Forwarding call to remote API', {
         url: `${baseUrl}/calls`,
-        agentId: callPayload.agent_id,
-        leadId: callPayload.lead_id
+        agentId: callPayload.agent_id
       });
 
       const response = await axios.post(`${baseUrl}/calls`, callPayload, {
