@@ -4,15 +4,28 @@
  */
 
 const express = require('express');
-const router = express.Router();
 const { 
   VoiceAgentController, 
   CallController, 
   BatchCallController, 
   CallInitiationController 
 } = require('../controllers');
-const { authenticateToken: jwtAuth } = require('../../../core/middleware/auth');
-const { pool } = require('../../../shared/database/connection');
+
+function createVoiceAgentRouter(pool, options = {}) {
+  const router = express.Router();
+
+  const jwtAuth = typeof options.jwtAuth === 'function'
+    ? options.jwtAuth
+    : (req, res, next) => next();
+
+  const tenantMiddleware = typeof options.tenantMiddleware === 'function'
+    ? options.tenantMiddleware
+    : (req, res, next) => {
+        req.tenantId = req.user?.tenantId || req.headers['x-tenant-id'] || req.query.tenant_id;
+        next();
+      };
+
+  const auth = [jwtAuth, tenantMiddleware];
 
 // ============================================
 // JWT-Protected Endpoints (User-Specific)  
@@ -24,7 +37,7 @@ const { pool } = require('../../../shared/database/connection');
  */
 router.get(
   '/user/available-agents',
-  jwtAuth,
+  auth,
   (req, res) => {
     const controller = new VoiceAgentController(pool);
     controller.getUserAvailableAgents(req, res);
@@ -37,7 +50,7 @@ router.get(
    */
   router.get(
     '/user/available-numbers',
-    jwtAuth,
+    auth,
     (req, res) => {
       const controller = new VoiceAgentController(pool);
       controller.getUserAvailableNumbers(req, res);
@@ -50,7 +63,7 @@ router.get(
    */
   router.get(
     '/voices/:id/sample-signed-url',
-    jwtAuth,
+    auth,
     (req, res) => {
       const controller = new VoiceAgentController(pool);
       controller.getVoiceSampleSignedUrl(req, res);
@@ -63,7 +76,7 @@ router.get(
    */
   router.get(
     '/agents/:agentId/sample-signed-url',
-    jwtAuth,
+    auth,
     (req, res) => {
       const controller = new VoiceAgentController(pool);
       controller.getAgentVoiceSampleSignedUrl(req, res);
@@ -89,7 +102,7 @@ router.get(
    */
   router.get(
     '/all',
-    jwtAuth,
+    auth,
     (req, res) => {
       const controller = new VoiceAgentController(pool);
       controller.getAllAgents(req, res);
@@ -102,7 +115,7 @@ router.get(
    */
   router.get(
     '/agent/:name',
-    jwtAuth,
+    auth,
     (req, res) => {
       const controller = new VoiceAgentController(pool);
       controller.getAgentByName(req, res);
@@ -115,7 +128,7 @@ router.get(
    */
   router.get(
     '/voices',
-    jwtAuth,
+    auth,
     (req, res) => {
       const controller = new VoiceAgentController(pool);
       controller.getAllVoices(req, res);
@@ -128,7 +141,7 @@ router.get(
    */
   router.get(
     '/',
-    jwtAuth,
+    auth,
     (req, res) => {
       const controller = new VoiceAgentController(pool);
       controller.getAllVoices(req, res);
@@ -141,7 +154,7 @@ router.get(
    */
   router.get(
     '/numbers',
-    jwtAuth,
+    auth,
     (req, res) => {
       const controller = new VoiceAgentController(pool);
       controller.getAllPhoneNumbers(req, res);
@@ -158,7 +171,7 @@ router.get(
    */
   router.get(
     '/calls',
-    jwtAuth,
+    auth,
     (req, res) => {
       const controller = new CallController(pool);
       controller.getCallLogs(req, res);
@@ -171,7 +184,7 @@ router.get(
    */
   router.post(
     '/calls',
-    jwtAuth,
+    auth,
     (req, res) => {
       const controller = new CallInitiationController(pool);
       controller.initiateCall(req, res);
@@ -184,7 +197,7 @@ router.get(
    */
   router.post(
     '/calls/batch',
-    jwtAuth,
+    auth,
     (req, res) => {
       const controller = new BatchCallController(pool);
       controller.batchInitiateCalls(req, res);
@@ -197,7 +210,7 @@ router.get(
    */
   router.get(
     '/calllogs',
-    jwtAuth,
+    auth,
     (req, res) => {
       const controller = new CallController(pool);
       controller.getCallLogs(req, res);
@@ -210,7 +223,7 @@ router.get(
    */
   router.get(
     '/calllogs/:call_log_id',
-    jwtAuth,
+    auth,
     (req, res) => {
       const controller = new CallController(pool);
       controller.getCallLogById(req, res);
@@ -223,7 +236,7 @@ router.get(
    */
   router.get(
     '/calllogs/batch/:batch_id',
-    jwtAuth,
+    auth,
     (req, res) => {
       const controller = new CallController(pool);
       controller.getBatchCallLogsByBatchId(req, res);
@@ -236,7 +249,7 @@ router.get(
    */
   router.post(
     '/calls/batch',
-    jwtAuth,
+    auth,
     (req, res) => {
       const controller = new CallController(pool);
       controller.batchInitiateCalls(req, res);
@@ -249,7 +262,7 @@ router.get(
    */
   router.get(
     '/calls/:id/recording-signed-url',
-    jwtAuth,
+    auth,
     (req, res) => {
       const controller = new CallController(pool);
       controller.getCallRecordingSignedUrl(req, res);
@@ -262,7 +275,7 @@ router.get(
    */
   router.get(
     '/calls/recent',
-    jwtAuth,
+    auth,
     (req, res) => {
       const controller = new CallController(pool);
       controller.getRecentCalls(req, res);
@@ -275,7 +288,7 @@ router.get(
    */
   router.get(
     '/calls/stats',
-    jwtAuth,
+    auth,
     (req, res) => {
       const controller = new CallController(pool);
       controller.getCallStats(req, res);
@@ -292,7 +305,7 @@ router.get(
    */
   router.post(
     '/resolve-phones',
-    jwtAuth,
+    auth,
     (req, res) => {
       const controller = new CallController(pool);
       controller.resolvePhones(req, res);
@@ -305,11 +318,14 @@ router.get(
    */
   router.post(
     '/update-summary',
-    jwtAuth,
+    auth,
     (req, res) => {
       const controller = new CallController(pool);
       controller.updateSalesSummary(req, res);
     }
   );
 
-module.exports = router;
+  return router;
+}
+
+module.exports = createVoiceAgentRouter;

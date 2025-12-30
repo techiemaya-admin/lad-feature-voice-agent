@@ -43,7 +43,8 @@ coverage/
 *.tmp
 *.temp
 .cache/
-db.js
-server.js
-package.json
-package.json
+
+# Project-specific ignores
+backend/core/
+backend/features/voice-agent/db.js
+backend/features/voice-agent/server.js
