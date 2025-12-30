@@ -4,7 +4,7 @@
  * Handles call management, call logs, and call-related operations
  * Note: Call initiation and batch calls have been moved to separate controllers
  */
-require('dotenv')
+require('dotenv').config();
 const axios = require('axios');
 const { VoiceCallModel, PhoneResolverModel, VoiceAgentModel } = require('../models');
 const { VAPIService, CallLoggingService, RecordingService } = require('../services');
