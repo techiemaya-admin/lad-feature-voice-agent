@@ -29,6 +29,12 @@ Thumbs.db
 lad-sandbox/
 lad-sandbox/**
 
+# Temporary standalone testing folders (NEVER commit)
+temp-standalone/
+temp-standalone/**
+standalone-test/
+standalone-test/**
+
 # Local test files
 **/test-pages/
 **/*-test.tsx
@@ -43,8 +49,19 @@ coverage/
 *.tmp
 *.temp
 .cache/
-db.js
-server.js
-package.json
-package.json
-core/
+
+# Testing artifacts (NEVER commit)
+**/test-server.js
+**/test-*.js
+**/*-test.js
+**/*.test.js
+**/*.spec.js
+
+# Public test HTML files
+backend/features/voice-agent/public/
+
+# Package.json changes in voice-agent (test scripts only)
+backend/features/voice-agent/package.json
+
+# Feature-level adapters and utilities (local testing fallbacks only)
+backend/features/voice-agent/utils/
