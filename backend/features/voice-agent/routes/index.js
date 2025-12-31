@@ -208,6 +208,16 @@ function createVoiceAgentRouter(db, options = {}) {
   );
 
   /**
+   * POST /calls/batch
+   * Initiate batch voice calls
+   */
+  router.post(
+    '/calls/batch',
+    tenantMiddleware,
+    (req, res) => callController.batchInitiateCalls(req, res)
+  );
+
+  /**
    * GET /calls/:id/recording-signed-url
    * Get signed URL for call recording
    */
