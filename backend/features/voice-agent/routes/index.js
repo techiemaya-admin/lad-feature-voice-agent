@@ -140,6 +140,30 @@ function createVoiceAgentRouter(db, options = {}) {
   );
 
   // ============================================
+  // Settings Endpoints
+  // ============================================
+
+  /**
+   * GET /settings
+   * Get voice agent settings
+   */
+  router.get(
+    '/settings',
+    tenantMiddleware,
+    (req, res) => voiceAgentController.getSettings(req, res)
+  );
+
+  /**
+   * PUT /settings
+   * Update voice agent settings
+   */
+  router.put(
+    '/settings',
+    tenantMiddleware,
+    (req, res) => voiceAgentController.updateSettings(req, res)
+  );
+
+  // ============================================
   // Call Endpoints
   // ============================================
 
@@ -181,16 +205,6 @@ function createVoiceAgentRouter(db, options = {}) {
     '/calllogs/:call_log_id',
     tenantMiddleware,
     (req, res) => callController.getCallLogById(req, res)
-  );
-
-  /**
-   * POST /calls/batch
-   * Initiate batch voice calls
-   */
-  router.post(
-    '/calls/batch',
-    tenantMiddleware,
-    (req, res) => callController.batchInitiateCalls(req, res)
   );
 
   /**
