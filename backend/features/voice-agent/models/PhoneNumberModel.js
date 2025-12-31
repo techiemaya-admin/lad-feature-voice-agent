@@ -17,13 +17,14 @@ class PhoneNumberModel {
   /**
    * Get all phone numbers for a tenant
    * 
+   * @param {string} schema - Schema name
    * @param {string} tenantId - Tenant ID for isolation
    * @returns {Promise<Array>} Phone numbers
    */
-  async getAllPhoneNumbers(tenantId) {
+  async getAllPhoneNumbers(schema, tenantId) {
     const query = `
       SELECT *
-      FROM lad_dev.voice_agent_numbers
+      FROM ${schema}.voice_agent_numbers
       WHERE tenant_id = $1 ORDER BY created_at DESC
     `;
 
@@ -34,11 +35,12 @@ class PhoneNumberModel {
   /**
    * Get phone number by ID (tenant-isolated)
    * 
+   * @param {string} schema - Schema name
    * @param {string} numberId - Phone number ID
    * @param {string} tenantId - Tenant ID for isolation
    * @returns {Promise<Object|null>} Phone number or null
    */
-  async getPhoneNumberById(numberId, tenantId) {
+  async getPhoneNumberById(schema, numberId, tenantId) {
     const query = `
       SELECT 
         id,
@@ -51,7 +53,7 @@ class PhoneNumberModel {
         metadata,
         created_at,
         updated_at
-      FROM phone_numbers
+      FROM ${schema}.phone_numbers
       WHERE id = $1 AND tenant_id = $2
     `;
 
@@ -62,11 +64,12 @@ class PhoneNumberModel {
   /**
    * Get phone number by actual number (tenant-isolated)
    * 
+   * @param {string} schema - Schema name
    * @param {string} phoneNumber - Phone number string
    * @param {string} tenantId - Tenant ID for isolation
    * @returns {Promise<Object|null>} Phone number record or null
    */
-  async getByPhoneNumber(phoneNumber, tenantId) {
+  async getByPhoneNumber(schema, phoneNumber, tenantId) {
     const query = `
       SELECT 
         id,
@@ -76,7 +79,7 @@ class PhoneNumberModel {
         number_type,
         capabilities,
         is_active
-      FROM phone_numbers
+      FROM ${schema}.phone_numbers
       WHERE phone_number = $1 AND tenant_id = $2
     `;
 
@@ -87,11 +90,12 @@ class PhoneNumberModel {
   /**
    * Get available numbers for a user
    * 
+   * @param {string} schema - Schema name
    * @param {string} userId - User ID
    * @param {string} tenantId - Tenant ID for isolation
    * @returns {Promise<Array>} Available phone numbers
    */
-  async getAvailableNumbersForUser(userId, tenantId) {
+  async getAvailableNumbersForUser(schema, userId, tenantId) {
     const query = `
       SELECT 
         id,
@@ -101,7 +105,7 @@ class PhoneNumberModel {
         provider,
         number_type,
         capabilities
-      FROM lad_dev.voice_agent_numbers
+      FROM ${schema}.voice_agent_numbers
       WHERE tenant_id = $1 
         AND is_active = true
       ORDER BY phone_number ASC

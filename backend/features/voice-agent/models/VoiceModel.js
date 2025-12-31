@@ -17,10 +17,11 @@ class VoiceModel {
   /**
    * Get all voices for a tenant
    * 
+   * @param {string} schema - Schema name
    * @param {string} tenantId - Tenant ID for isolation
    * @returns {Promise<Array>} Voice profiles
    */
-  async getAllVoices(tenantId) {
+  async getAllVoices(schema, tenantId) {
     const query = `
       SELECT 
         id,
@@ -34,7 +35,7 @@ class VoiceModel {
         is_active,
         created_at,
         updated_at
-      FROM lad_dev.voice_agent_voices
+      FROM ${schema}.voice_agent_voices
       WHERE tenant_id = $1 AND is_active = true
       ORDER BY voice_name ASC
     `;
@@ -48,11 +49,12 @@ class VoiceModel {
   /**
    * Get voice by ID (tenant-isolated)
    * 
+   * @param {string} schema - Schema name
    * @param {string} voiceId - Voice ID
    * @param {string} tenantId - Tenant ID for isolation
    * @returns {Promise<Object|null>} Voice profile or null
    */
-  async getVoiceById(voiceId, tenantId) {
+  async getVoiceById(schema, voiceId, tenantId) {
     const query = `
       SELECT 
         id,
@@ -67,7 +69,7 @@ class VoiceModel {
         metadata,
         created_at,
         updated_at
-      FROM lad_dev.voice_agent_voices
+      FROM ${schema}.voice_agent_voices
       WHERE id = $1 AND tenant_id = $2
     `;
 
@@ -78,14 +80,15 @@ class VoiceModel {
   /**
    * Get voice sample URL (tenant-isolated)
    * 
+   * @param {string} schema - Schema name
    * @param {string} voiceId - Voice ID
    * @param {string} tenantId - Tenant ID for isolation
    * @returns {Promise<string|null>} Voice sample URL (gs:// format) or null
    */
-  async getVoiceSampleUrl(voiceId, tenantId) {
+  async getVoiceSampleUrl(schema, voiceId, tenantId) {
     const query = `
       SELECT voice_sample_url
-      FROM lad_dev.voice_agent_voices
+      FROM ${schema}.voice_agent_voices
       WHERE id = $1 AND tenant_id = $2
     `;
 
@@ -198,7 +201,7 @@ class VoiceModel {
     }
 
     const query = `
-      UPDATE lad_dev.voice_agent_voices
+      UPDATE ${schema}.voice_agent_voices
       SET ${setClauses.join(', ')}
       WHERE id = $1 AND tenant_id = $2
       RETURNING 
@@ -221,13 +224,14 @@ class VoiceModel {
   /**
    * Delete voice (soft delete - sets is_active = false)
    * 
+   * @param {string} schema - Schema name
    * @param {string} voiceId - Voice ID
    * @param {string} tenantId - Tenant ID for isolation
    * @returns {Promise<boolean>} Success
    */
-  async deleteVoice(voiceId, tenantId) {
+  async deleteVoice(schema, voiceId, tenantId) {
     const query = `
-      UPDATE lad_dev.voice_agent_voices
+      UPDATE ${schema}.voice_agent_voices
       SET is_active = false, updated_at = NOW()
       WHERE id = $1 AND tenant_id = $2
     `;
@@ -239,11 +243,12 @@ class VoiceModel {
   /**
    * Search voices by criteria (tenant-isolated)
    * 
+   * @param {string} schema - Schema name
    * @param {string} tenantId - Tenant ID for isolation
    * @param {Object} criteria - Search criteria
    * @returns {Promise<Array>} Matching voices
    */
-  async searchVoices(tenantId, criteria = {}) {
+  async searchVoices(schema, tenantId, criteria = {}) {
     const whereClauses = ['tenant_id = $1', 'is_active = true'];
     const values = [tenantId];
     let paramIndex = 2;
@@ -275,7 +280,7 @@ class VoiceModel {
         language,
         gender,
         created_at
-      FROM lad_dev.voice_agent_voices
+      FROM ${schema}.voice_agent_voices
       WHERE ${whereClauses.join(' AND ')}
       ORDER BY voice_name ASC
     `;

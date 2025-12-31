@@ -1,4 +1,11 @@
 const { VAPIService } = require('../../services');
+let logger;
+try {
+  logger = require('../../../../core/utils/logger');
+} catch (e) {
+  const loggerAdapter = require('../../utils/logger');
+  logger = loggerAdapter.getLogger();
+}
 
 class BatchCallController {
   constructor(db) {
@@ -92,7 +99,7 @@ class BatchCallController {
             data: response.data
           });
         } catch (forwardError) {
-          console.error('Error forwarding batch call data to remote API:', forwardError.message);
+          logger.error('Error forwarding batch call data to remote API:', forwardError.message);
           
           return res.status(502).json({
             success: false,
@@ -102,7 +109,7 @@ class BatchCallController {
         }
       }
     } catch (error) {
-      console.error('Batch initiate calls error:', error);
+      logger.error('Batch initiate calls error:', error);
       res.status(500).json({
         success: false,
         error: 'Failed to initiate batch calls',

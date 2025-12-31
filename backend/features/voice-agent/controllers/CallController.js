@@ -8,6 +8,13 @@ require('dotenv')
 const axios = require('axios');
 const { VoiceCallModel, PhoneResolverModel, VoiceAgentModel } = require('../models');
 const { VAPIService, CallLoggingService, RecordingService } = require('../services');
+let logger;
+try {
+  logger = require('../../../core/utils/logger');
+} catch (e) {
+  const loggerAdapter = require('../utils/logger');
+  logger = loggerAdapter.getLogger();
+}
 
 class CallController {
   constructor(db) {
@@ -71,7 +78,7 @@ class CallController {
         signed_url: signedUrl
       });
     } catch (error) {
-      console.error('Get call recording signed URL error:', error?.response?.data || error.message);
+      logger.error('Get call recording signed URL error:', error?.response?.data || error.message);
       return res.status(500).json({
         success: false,
         error: 'Failed to generate signed URL'
@@ -113,7 +120,7 @@ class CallController {
         type
       });
     } catch (error) {
-      console.error('Resolve phones error:', error);
+      logger.error('Resolve phones error:', error);
       res.status(500).json({
         success: false,
         error: 'Failed to resolve phone numbers',
@@ -174,7 +181,7 @@ class CallController {
         data: result
       });
     } catch (error) {
-      console.error('Update sales summary error:', error);
+      logger.error('Update sales summary error:', error);
       res.status(500).json({
         success: false,
         error: 'Failed to update sales summary',
@@ -216,7 +223,7 @@ class CallController {
         count: calls.length
       });
     } catch (error) {
-      console.error('Get recent calls error:', error);
+      logger.error('Get recent calls error:', error);
       res.status(500).json({
         success: false,
         error: 'Failed to fetch calls',
@@ -245,7 +252,7 @@ class CallController {
         data: stats
       });
     } catch (error) {
-      console.error('Get call stats error:', error);
+      logger.error('Get call stats error:', error);
       res.status(500).json({
         success: false,
         error: 'Failed to fetch call statistics',
@@ -285,7 +292,7 @@ class CallController {
         count: calls.length
       });
     } catch (error) {
-      console.error('Get call logs error:', error);
+      logger.error('Get call logs error:', error);
       res.status(500).json({
         success: false,
         error: 'Failed to fetch call logs',
@@ -353,7 +360,7 @@ class CallController {
             callLog.signed_recording_url = signedUrl;
           }
         } catch (error) {
-          console.error('Error generating signed URL for call recording:', error);
+          logger.error('Error generating signed URL for call recording:', error);
           // Don't fail the request if we can't get a signed URL
           // The client can still try to access the recording URL directly if needed
         }
@@ -365,7 +372,7 @@ class CallController {
       });
 
     } catch (error) {
-      console.error('Get call log by ID error:', error);
+      logger.error('Get call log by ID error:', error);
       res.status(500).json({
         success: false,
         error: 'Failed to fetch call log',

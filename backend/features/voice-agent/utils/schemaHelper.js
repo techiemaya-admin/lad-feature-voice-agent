@@ -14,51 +14,106 @@ try {
 }
 
 /**
- * Resolve database schema for a request in a multi-tenant environment.
- *
- * Priority:
- * - Delegate to core helper if available (getSchemaFromRequest or getSchema)
- * - req.user.schema (preferred)
- * - req.tenantSchema (set by middleware)
- * - process.env.DEFAULT_DB_SCHEMA or process.env.DB_SCHEMA (fallback)
- *
- * This function MUST NOT hardcode any schema name like `lad_dev`.
+ * Get the database schema for the current request/context
+ * Delegates to core helper if available, otherwise provides fallback
+ * Priority: req.user.schema > req.tenant.schema > env variable > default
+ * 
+ * @param {Object} req - Express request object (optional)
+ * @param {Object} options - Override options
+ * @returns {string} Schema name
  */
-function getSchemaFromRequest(req) {
+function getSchema(req = null, options = {}) {
   // 1. Delegate to core helper if present
-  if (coreSchemaHelper) {
-    if (typeof coreSchemaHelper.getSchemaFromRequest === 'function') {
-      return coreSchemaHelper.getSchemaFromRequest(req);
-    }
-
-    if (typeof coreSchemaHelper.getSchema === 'function') {
-      return coreSchemaHelper.getSchema(req);
-    }
+  if (coreSchemaHelper && typeof coreSchemaHelper.getSchema === 'function') {
+    return coreSchemaHelper.getSchema(req, options);
   }
 
-  // 2. Use schema on authenticated user if present
+  // 2. Check explicit override
+  if (options && options.schema) {
+    return options.schema;
+  }
+
+  // 3. Check request user object (most common in authenticated routes)
   if (req && req.user && req.user.schema) {
     return req.user.schema;
   }
 
-  // 3. Use schema set by tenant middleware if present
+  // 4. Check tenant object (if passed separately)
+  if (req && req.tenant && req.tenant.schema) {
+    return req.tenant.schema;
+  }
+
+  // 5. Check tenantSchema set by middleware
   if (req && req.tenantSchema) {
     return req.tenantSchema;
   }
 
-  // 4. Environment fallbacks (feature-level, no hardcoded schema)
-  if (process.env.DEFAULT_DB_SCHEMA) {
-    return process.env.DEFAULT_DB_SCHEMA;
+  // 6. Check environment variable
+  if (process.env.DEFAULT_SCHEMA) {
+    return process.env.DEFAULT_SCHEMA;
   }
 
   if (process.env.DB_SCHEMA) {
     return process.env.DB_SCHEMA;
   }
 
-  // 5. If we still cannot resolve, fail fast
-  throw new Error('Database schema could not be resolved for request');
+  // 7. Default to lad_dev for development
+  return 'lad_dev';
+}
+
+/**
+ * Resolve database schema for a request in a multi-tenant environment.
+ * This is an alias for getSchema to maintain backward compatibility.
+ *
+ * @param {Object} req - Express request object
+ * @returns {string} Schema name
+ */
+function getSchemaFromRequest(req) {
+  // 1. Delegate to core helper if present
+  if (coreSchemaHelper && typeof coreSchemaHelper.getSchemaFromRequest === 'function') {
+    return coreSchemaHelper.getSchemaFromRequest(req);
+  }
+
+  // 2. Use getSchema with fallback behavior
+  return getSchema(req);
+}
+
+/**
+ * Build a table reference with schema
+ * 
+ * @param {string} tableName - Table name without schema
+ * @param {Object} req - Express request object (optional)
+ * @returns {string} Fully qualified table name (schema.table)
+ */
+function getTable(tableName, req = null) {
+  // Delegate to core helper if present
+  if (coreSchemaHelper && typeof coreSchemaHelper.getTable === 'function') {
+    return coreSchemaHelper.getTable(tableName, req);
+  }
+
+  const schema = getSchema(req);
+  return `${schema}.${tableName}`;
+}
+
+/**
+ * Sanitize schema name to prevent SQL injection
+ * 
+ * @param {string} schema - Schema name to sanitize
+ * @returns {string} Sanitized schema name
+ */
+function sanitizeSchema(schema) {
+  // Delegate to core helper if present
+  if (coreSchemaHelper && typeof coreSchemaHelper.sanitizeSchema === 'function') {
+    return coreSchemaHelper.sanitizeSchema(schema);
+  }
+
+  // Only allow alphanumeric and underscore
+  return schema.replace(/[^a-zA-Z0-9_]/g, '');
 }
 
 module.exports = {
+  getSchema,
   getSchemaFromRequest,
+  getTable,
+  sanitizeSchema,
 };

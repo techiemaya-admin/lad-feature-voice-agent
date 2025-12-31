@@ -4,7 +4,7 @@
  * Business entity for voice calls (not feature-prefixed)
  * Uses tenant_id for multi-tenancy isolation
  * 
- * Table: voice_calls (NOT voice_agent_calls or call_logs_voiceagent)
+ * Table: voice_call_logs (NOT voice_agent_calls or call_logs_voiceagent)
  * Schema: Multi-tenant with tenant_id on every row
  */
 
@@ -18,41 +18,42 @@ class VoiceCallModel {
    * 
    * @param {Object} params - Call parameters
    * @param {string} params.tenantId - Tenant ID for isolation
-   * @param {string} params.voiceId - Voice profile ID
    * @param {number} params.agentId - Agent ID
-   * @param {string} params.fromNumber - Caller number
-   * @param {string} params.toNumber - Recipient number
+   * @param {string} params.fromNumberId - From number ID (UUID)
+   * @param {string} params.toCountryCode - Country code (e.g., '+1')
+   * @param {string} params.toBaseNumber - Base phone number
    * @param {string} params.status - Call status (calling, ongoing, ended, declined, failed)
-   * @param {string} params.addedContext - Context for the call
    * @param {string} params.leadId - Associated lead ID (from main leads table)
-   * @param {string} params.initiatedBy - Who initiated the call
-   * @param {string} params.recordingUrl - GCS URL for recording
+   * @param {string} params.initiatedByUserId - User ID who initiated the call
+   * @param {string} params.recordingUrl - Recording URL
+   * @param {string} params.direction - Call direction (inbound/outbound)
    * @returns {Promise<Object>} Created call log
    */
   async createCallLog({
+    schema,
     tenantId,
-    voiceId,
     agentId,
-    fromNumber,
-    toNumber,
+    fromNumberId = null,
+    toCountryCode,
+    toBaseNumber,
     status = 'calling',
-    addedContext,
     leadId = null,
-    initiatedBy = null,
-    recordingUrl = null
+    initiatedByUserId = null,
+    recordingUrl = null,
+    direction = 'outbound'
   }) {
     const query = `
-      INSERT INTO voice_calls (
+      INSERT INTO ${schema}.voice_call_logs (
         tenant_id,
-        voice_id,
         agent_id,
-        from_number,
-        to_number,
+        from_number_id,
+        to_country_code,
+        to_base_number,
         status,
-        added_context,
         lead_id,
-        initiated_by,
+        initiated_by_user_id,
         recording_url,
+        direction,
         started_at,
         created_at,
         updated_at
@@ -60,10 +61,10 @@ class VoiceCallModel {
       RETURNING 
         id,
         tenant_id,
-        voice_id,
         agent_id,
-        from_number,
-        to_number,
+        from_number_id,
+        to_country_code,
+        to_base_number,
         status,
         started_at,
         lead_id
@@ -71,15 +72,15 @@ class VoiceCallModel {
 
     const values = [
       tenantId,
-      voiceId,
       agentId,
-      fromNumber,
-      toNumber,
+      fromNumberId,
+      toCountryCode,
+      toBaseNumber,
       status,
-      addedContext,
       leadId,
-      initiatedBy,
-      recordingUrl
+      initiatedByUserId,
+      recordingUrl,
+      direction
     ];
 
     const result = await this.pool.query(query, values);
@@ -89,11 +90,12 @@ class VoiceCallModel {
   /**
    * Get call log by ID (tenant-isolated)
    * 
+   * @param {string} schema - Schema name
    * @param {string} callId - Call log ID
    * @param {string} tenantId - Tenant ID for isolation
    * @returns {Promise<Object|null>} Call log or null
    */
-  async getCallById(callId, tenantId) {
+  async getCallById(schema, callId, tenantId) {
     const query = `
       SELECT 
         vcl.id AS call_log_id,
@@ -104,32 +106,27 @@ class VoiceCallModel {
         vcl.to_base_number,
         vcl.from_number_id,
         vcl.agent_id,
+        va.name AS agent_name,
         vcl.status,
         vcl.started_at,
         vcl.ended_at,
         vcl.duration_seconds,
         vcl.recording_url,
-        vcl.transcripts,
         vcl.cost,
         vcl.currency,
-        vcl.cost_breakdown,
-        vcl.campaign_id,
-        vcl.campaign_lead_id,
-        vcl.campaign_step_id,
         vcl.created_at,
         vcl.updated_at,
         vcl.direction,
         vcl.metadata,
-        l.first_name,
-        l.last_name,
-        vcl.cost AS call_cost,
+        l.first_name AS lead_first_name,
+        l.last_name AS lead_last_name,
         vca.analysis
-      FROM lad_dev.voice_call_logs vcl
-      LEFT JOIN lad_dev.leads l ON l.id = vcl.lead_id
-      LEFT JOIN lad_dev.voice_agents va ON va.id = vcl.agent_id AND va.tenant_id = vcl.tenant_id
-      LEFT JOIN LATERAL (
+      FROM ${schema}.voice_call_logs vcl
+      LEFT JOIN ${schema}.leads l ON l.id = vcl.lead_id
+      LEFT JOIN ${schema}.voice_agents va ON va.id = vcl.agent_id AND va.tenant_id = vcl.tenant_id
+      LEFT JOIN LATERAL (c
         SELECT row_to_json(vca_row) AS analysis
-        FROM lad_dev.voice_call_analysis vca_row
+        FROM ${schema}.voice_call_analysis vca_row
         WHERE vca_row.call_log_id = vcl.id
         ORDER BY vca_row.created_at DESC NULLS LAST
         LIMIT 1
@@ -144,14 +141,15 @@ class VoiceCallModel {
   /**
    * Get call recording URL by ID (tenant-isolated)
    * 
+   * @param {string} schema - Schema name
    * @param {string} callId - Call log ID
    * @param {string} tenantId - Tenant ID for isolation
    * @returns {Promise<string|null>} Recording URL or null
    */
-  async getRecordingUrl(callId, tenantId) {
+  async getRecordingUrl(schema, callId, tenantId) {
     const query = `
       SELECT recording_url
-      FROM lad_dev.voice_call_logs
+      FROM ${schema}.voice_call_logs
       WHERE id = $1 AND tenant_id = $2
     `;
 
@@ -162,13 +160,14 @@ class VoiceCallModel {
   /**
    * Update call status
    * 
+   * @param {string} schema - Schema name
    * @param {string} callId - Call log ID
    * @param {string} tenantId - Tenant ID for isolation
    * @param {string} status - New status
    * @param {Object} updates - Optional additional updates
    * @returns {Promise<Object>} Updated call log
    */
-  async updateCallStatus(callId, tenantId, status, updates = {}) {
+  async updateCallStatus(schema, callId, tenantId, status, updates = {}) {
     const setClauses = ['status = $3', 'updated_at = NOW()'];
     const values = [callId, tenantId, status];
     let paramIndex = 4;
@@ -184,9 +183,8 @@ class VoiceCallModel {
       values.push(updates.recordingUrl);
       paramIndex++;
     }
-
     const query = `
-      UPDATE voice_calls
+      UPDATE ${schema}.voice_call_logs
       SET ${setClauses.join(', ')}
       WHERE id = $1 AND tenant_id = $2
       RETURNING 
@@ -210,7 +208,7 @@ class VoiceCallModel {
    * @param {number} limit - Max results
    * @returns {Promise<Array>} Call logs
    */
-  async getCallsForLead(leadId, tenantId, limit = 10) {
+  async getCallsForLead(schema, leadId, tenantId, limit = 10) {
     const query = `
       SELECT 
         id,
@@ -223,7 +221,7 @@ class VoiceCallModel {
         started_at,
         ended_at,
         initiated_by
-      FROM voice_calls
+      FROM ${schema}.voice_call_logs
       WHERE lead_id = $1 AND tenant_id = $2
       ORDER BY started_at DESC
       LIMIT $3
@@ -245,7 +243,7 @@ class VoiceCallModel {
     return this.getCallLogs(tenantId, filters, limit);
   }
 
-  async getCallLogs(tenantId, filters = {}, limit = 50) {
+  async getCallLogs(schema, tenantId, filters = {}, limit = 50) {
     const whereClauses = ['tenant_id = $1'];
     const values = [tenantId];
     let paramIndex = 2;
@@ -281,6 +279,7 @@ class VoiceCallModel {
         vcl.to_base_number,
         vcl.from_number_id,
         vcl.agent_id,
+        va.name AS agent_name,
         vcl.status,
         vcl.started_at,
         vcl.ended_at,
@@ -295,16 +294,15 @@ class VoiceCallModel {
         vcl.campaign_step_id,
         vcl.direction,
         vcl.metadata,
-        l.first_name,
-        l.last_name,
-        vcl.cost AS call_cost,
+        l.first_name AS lead_first_name,
+        l.last_name AS lead_last_name,
         vca.analysis
-      FROM lad_dev.voice_call_logs vcl
-      LEFT JOIN lad_dev.leads l ON l.id = vcl.lead_id
-      LEFT JOIN lad_dev.voice_agents va ON va.id = vcl.agent_id AND va.tenant_id = vcl.tenant_id
+      FROM ${schema}.voice_call_logs vcl
+      LEFT JOIN ${schema}.leads l ON l.id = vcl.lead_id
+      LEFT JOIN ${schema}.voice_agents va ON va.id = vcl.agent_id AND va.tenant_id = vcl.tenant_id
       LEFT JOIN LATERAL (
         SELECT row_to_json(vca_row) AS analysis
-        FROM lad_dev.voice_call_analysis vca_row
+        FROM ${schema}.voice_call_analysis vca_row
         WHERE vca_row.call_log_id = vcl.id
         ORDER BY vca_row.created_at DESC NULLS LAST
         LIMIT 1
@@ -326,7 +324,7 @@ class VoiceCallModel {
    * @param {Object} dateRange - Date range filter
    * @returns {Promise<Object>} Statistics
    */
-  async getCallStats(tenantId, dateRange = {}) {
+  async getCallStats(schema, tenantId, dateRange = {}) {
     const whereClauses = ['tenant_id = $1'];
     const values = [tenantId];
     let paramIndex = 2;
@@ -350,7 +348,7 @@ class VoiceCallModel {
         COUNT(CASE WHEN status = 'declined' THEN 1 END) as declined_calls,
         COUNT(DISTINCT lead_id) as unique_leads,
         COUNT(DISTINCT agent_id) as agents_used
-      FROM voice_calls
+      FROM ${schema}.voice_call_logs
       WHERE ${whereClauses.join(' AND ')}
     `;
 

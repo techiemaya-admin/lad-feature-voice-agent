@@ -1,4 +1,4 @@
-import api from '../../../../web/src/services/api';
+import api from './api';
 import { VoiceAgent, CallLog, PhoneNumber, BatchCallLogEntry } from '../types';
 
 /**
