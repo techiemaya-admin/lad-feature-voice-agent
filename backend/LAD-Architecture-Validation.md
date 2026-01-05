@@ -40,9 +40,19 @@ Frontend:
 
 Backend:
 - No SQL in controllers/routes.
-- Repositories: SQL only
+- Repositories: SQL only (data access layer)
 - Services: business logic only (call repository)
 - Controllers: validate input + call service + return response
+- Folder structure (REQUIRED for LAD compliance):
+  * repositories/ - Data access layer with all SQL queries
+  * services/ - Business logic layer (NO SQL)
+  * controllers/ - Request handling, validation orchestration
+  * validators/ - Input validation functions
+  * dtos/ - Data Transfer Objects for field mapping
+  * constants/ - Enum definitions and static values
+  * routes/ - Route definitions
+  * middleware/ - Authentication and request processing
+  * utils/ - Feature-specific utilities
 - Utilities:
   - Shared cross-feature infra goes in core/shared
   - Feature-only utilities go inside that feature folder
@@ -103,12 +113,13 @@ A) “Architecture Compliance Review”
   1) hardcoded schema usage (lad_dev.*)
   2) missing tenant scoping
   3) console statements
-  4) SQL in controllers
+  4) SQL in controllers or services (must be in repositories)
   5) direct fetch/axios in web layer
   6) naming inconsistencies (organization_id vs tenant_id)
   7) unsafe foreign keys and missing indexes
   8) secrets in logs
   9) missing metadata defaults
+  10) incorrect folder structure (validators in middleware, missing dtos/constants, models instead of repositories)
 
 B) Categorize findings:
 
@@ -165,16 +176,25 @@ When you implement:
 
 For backend:
 - If you add a new endpoint:
-  - add route handler
-  - add service method
-  - add repository query
-  - add validation schema if used
+  - add route handler in routes/
+  - add service method in services/ (NO SQL)
+  - add repository query in repositories/ (SQL only)
+  - add validator in validators/ if input validation needed
+  - add constants in constants/ if enum values needed
+  - add DTO in dtos/ if field mapping needed
   - ensure tenant & capability enforcement
 - If you add new tables:
   - provide DDL
   - provide indexes
   - provide FKs (tenant-safe)
   - include metadata defaults
+- Always use proper folder structure:
+  * repositories/ for data access
+  * services/ for business logic
+  * controllers/ for request handling
+  * validators/ for input validation
+  * dtos/ for field mapping
+  * constants/ for enums
 
 For frontend:
 - If you add a new feature module:
@@ -195,3 +215,4 @@ For frontend:
 - Always enforce capability and tenant feature gating where applicable.
 
 END OF SYSTEM PROMPT
+

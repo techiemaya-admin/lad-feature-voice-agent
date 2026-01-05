@@ -288,15 +288,19 @@ class CallController {
 
       res.json({
         success: true,
+        logs: calls,
         data: calls,
         count: calls.length
       });
     } catch (error) {
       logger.error('Get call logs error:', error);
-      res.status(500).json({
-        success: false,
-        error: 'Failed to fetch call logs',
-        message: error.message
+      // Return empty array if tables don't exist yet
+      res.json({
+        success: true,
+        logs: [],
+        data: [],
+        count: 0,
+        warning: 'Voice agent tables not yet migrated'
       });
     }
   }
@@ -326,6 +330,10 @@ class CallController {
         });
       }
 
+      logger.info(`[CallController] Call log fetched for ${call_log_id}`);
+      logger.info(`[CallController] Transcripts segments in DB result: ${callLog.transcripts?.segments?.length || 0}`);
+      logger.info(`[CallController] Full transcripts object keys: ${callLog.transcripts ? Object.keys(callLog.transcripts).join(', ') : 'none'}`);
+      
       // Check if user has access to this call log
       const user = req.user;
       const isAdmin = user?.role === 'admin';
@@ -366,6 +374,8 @@ class CallController {
         }
       }
 
+      logger.info(`[CallController] Sending response for call ${call_log_id}: transcripts segments=${callLog.transcripts?.segments?.length || 0}`);
+
       return res.json({
         success: true,
         data: callLog
@@ -374,6 +384,80 @@ class CallController {
     } catch (error) {
       logger.error('Get call log by ID error:', error);
       res.status(500).json({
+        success: false,
+        error: 'Failed to fetch call log',
+        message: error.message
+      });
+    }
+  }
+
+  /**
+   * V2: GET /calls/job/:job_id
+   * Get call log by job ID
+   */
+  async getCallLogByJobId(req, res) {
+    try {
+      const { job_id } = req.params;
+      const tenantId = req.tenantId || req.user?.tenantId;
+
+      logger.info('[CallController] V2 getCallLogByJobId called', { job_id, tenantId });
+
+      if (!job_id) {
+        return res.status(400).json({
+          success: false,
+          error: 'job_id is required'
+        });
+      }
+
+      // Try to get from local database first
+      const localLog = await this.callModel.getCallLogById(job_id);
+      
+      if (localLog) {
+        return res.json({
+          success: true,
+          log: localLog
+        });
+      }
+
+      // If not found locally, forward to external service
+      const baseUrl = process.env.BASE_URL;
+      if (!baseUrl) {
+        return res.status(404).json({
+          success: false,
+          error: 'Call log not found'
+        });
+      }
+
+      const headers = {
+        'Content-Type': 'application/json',
+        'X-Frontend-ID': process.env.BASE_URL_FRONTEND_HEADER || 'dev',
+        'X-API-Key': process.env.BASE_URL_FRONTEND_APIKEY || ''
+      };
+
+      try {
+        const response = await axios.get(`${baseUrl}/calls/job/${job_id}`, { headers });
+        
+        return res.json({
+          success: true,
+          log: response.data
+        });
+      } catch (axiosError) {
+        if (axiosError.response?.status === 404) {
+          return res.status(404).json({
+            success: false,
+            error: 'Call log not found'
+          });
+        }
+        throw axiosError;
+      }
+
+    } catch (error) {
+      logger.error('[CallController] V2 getCallLogByJobId failed', { 
+        error: error.message, 
+        job_id: req.params.job_id 
+      });
+      
+      return res.status(500).json({
         success: false,
         error: 'Failed to fetch call log',
         message: error.message
