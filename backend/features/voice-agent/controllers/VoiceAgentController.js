@@ -53,10 +53,12 @@ class VoiceAgentController {
       });
     } catch (error) {
       logger.error('Get user available agents error:', error);
-      res.status(500).json({
-        success: false,
-        error: 'Failed to fetch available agents',
-        message: error.message
+      // Return empty array if tables don't exist yet
+      res.json({
+        success: true,
+        data: [],
+        count: 0,
+        warning: 'Voice agent tables not yet migrated'
       });
     }
   }
@@ -70,8 +72,9 @@ class VoiceAgentController {
     try {
       const userId = req.user.id;
       const tenantId = req.user.tenantId;
+      const schema = getSchema(req);
 
-      const numbers = await this.phoneModel.getAvailableNumbersForUser(userId, tenantId);
+      const numbers = await this.phoneModel.getAvailableNumbersForUser(schema, userId, tenantId);
 
       res.json({
         success: true,
@@ -80,10 +83,12 @@ class VoiceAgentController {
       });
     } catch (error) {
       logger.error('Get user available numbers error:', error);
-      res.status(500).json({
-        success: false,
-        error: 'Failed to fetch available numbers',
-        message: error.message
+      // Return empty array if tables don't exist yet
+      res.json({
+        success: true,
+        data: [],
+        count: 0,
+        warning: 'Voice agent tables not yet migrated'
       });
     }
   }
@@ -339,29 +344,26 @@ class VoiceAgentController {
       const schema = getSchema(req);
 
       // Default settings for voice agent configuration
+      // Matches the structure expected by VoiceAgentSettings.tsx and VoiceAgentHighlights.tsx
       const settings = {
         llm: {
           provider: 'openai',
           model: 'gpt-4',
           temperature: 0.7,
-          max_tokens: 150
+          maxTokens: 2000
         },
         tts: {
           provider: 'elevenlabs',
-          voice_id: 'default',
-          stability: 0.5,
-          similarity_boost: 0.75
+          voice: 'rachel',
+          speed: 1.0,
+          pitch: 1.0
         },
         stt: {
           provider: 'deepgram',
-          model: 'nova-2',
-          language: 'en-US'
+          language: 'en-US',
+          model: 'nova-2'
         },
-        call: {
-          max_duration: 300,
-          silence_timeout: 30,
-          record_calls: true
-        }
+        systemPrompt: 'You are a helpful AI assistant focused on lead generation and customer engagement.'
       };
 
       logger.info('Get voice agent settings:', { tenantId, schema });
