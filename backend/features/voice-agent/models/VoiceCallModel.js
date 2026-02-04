@@ -42,7 +42,8 @@ class VoiceCallModel {
     leadId = null,
     initiatedByUserId = null,
     recordingUrl = null,
-    direction = 'outbound'
+    direction = 'outbound',
+    metadata = null
   }) {
     const query = `
       INSERT INTO ${schema}.voice_call_logs (
@@ -56,10 +57,11 @@ class VoiceCallModel {
         initiated_by_user_id,
         recording_url,
         direction,
+        metadata,
         started_at,
         created_at,
         updated_at
-      ) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, NOW(), NOW(), NOW())
+      ) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, NOW(), NOW(), NOW())
       RETURNING 
         id,
         tenant_id,
@@ -69,7 +71,8 @@ class VoiceCallModel {
         to_base_number,
         status,
         started_at,
-        lead_id
+        lead_id,
+        metadata
     `;
 
     const values = [
@@ -82,7 +85,8 @@ class VoiceCallModel {
       leadId,
       initiatedByUserId,
       recordingUrl,
-      direction
+      direction,
+      metadata ? JSON.stringify(metadata) : null
     ];
 
     const result = await this.pool.query(query, values);
@@ -143,7 +147,19 @@ class VoiceCallModel {
       LEFT JOIN ${schema}.leads l ON l.id = vcl.lead_id
       LEFT JOIN ${schema}.voice_agents va ON va.id = vcl.agent_id AND va.tenant_id = vcl.tenant_id
       LEFT JOIN LATERAL (
-        SELECT row_to_json(vca_row) AS analysis
+        SELECT jsonb_build_object(
+          'id', vca_row.id,
+          'call_log_id', vca_row.call_log_id,
+          'summary', COALESCE(NULLIF(vca_row.summary, ''), vca_row.raw_analysis->'sentiment_full'->>'sentiment_description', vca_row.sentiment),
+          'sentiment', vca_row.sentiment,
+          'disposition', COALESCE(vca_row.raw_analysis->'disposition_full'->>'disposition', ''),
+          'recommendations', COALESCE(vca_row.recommended_action, vca_row.raw_analysis->'disposition_full'->>'recommended_action', ''),
+          'key_points', vca_row.key_points,
+          'lead_extraction', vca_row.lead_extraction,
+          'raw_analysis', vca_row.raw_analysis,
+          'analysis_cost', vca_row.analysis_cost,
+          'created_at', vca_row.created_at
+        ) AS analysis
         FROM ${schema}.voice_call_analysis vca_row
         WHERE vca_row.call_log_id = vcl.id
         ORDER BY vca_row.created_at DESC NULLS LAST
@@ -288,6 +304,16 @@ class VoiceCallModel {
       values.push(filters.startDate);
       paramIndex++;
     }
+    if (filters.fromDate) {
+      whereClauses.push(`started_at >= $${paramIndex}`);
+      values.push(filters.fromDate);
+      paramIndex++;
+    }
+    if (filters.toDate) {
+      whereClauses.push(`started_at <= $${paramIndex}`);
+      values.push(filters.toDate);
+      paramIndex++;
+    }
     if (filters.userId) {
       whereClauses.push(`initiated_by_user_id = $${paramIndex}`);
       values.push(filters.userId);
@@ -328,7 +354,19 @@ class VoiceCallModel {
       LEFT JOIN ${schema}.voice_agents va ON va.id = vcl.agent_id AND va.tenant_id = vcl.tenant_id
       LEFT JOIN ${schema}.voice_call_batch_entries vcbe ON vcbe.call_log_id = vcl.id AND vcbe.is_deleted = false
       LEFT JOIN LATERAL (
-        SELECT row_to_json(vca_row) AS analysis
+        SELECT jsonb_build_object(
+          'id', vca_row.id,
+          'call_log_id', vca_row.call_log_id,
+          'summary', COALESCE(NULLIF(vca_row.summary, ''), vca_row.raw_analysis->'sentiment_full'->>'sentiment_description', vca_row.sentiment),
+          'sentiment', vca_row.sentiment,
+          'disposition', COALESCE(vca_row.raw_analysis->'disposition_full'->>'disposition', ''),
+          'recommendations', COALESCE(vca_row.recommended_action, vca_row.raw_analysis->'disposition_full'->>'recommended_action', ''),
+          'key_points', vca_row.key_points,
+          'lead_extraction', vca_row.lead_extraction,
+          'raw_analysis', vca_row.raw_analysis,
+          'analysis_cost', vca_row.analysis_cost,
+          'created_at', vca_row.created_at
+        ) AS analysis
         FROM ${schema}.voice_call_analysis vca_row
         WHERE vca_row.call_log_id = vcl.id
         ORDER BY vca_row.created_at DESC NULLS LAST
