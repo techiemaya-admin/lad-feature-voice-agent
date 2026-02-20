@@ -5,6 +5,7 @@
  * Handles call initiation, assistant configuration, and dynamic greetings
  * 
  * VAPI API: https://api.vapi.ai/call
+ * Need to deprecate old VAPIService and refactor to this new class with better structure and error handling
  */
 
 const axios = require('axios');
@@ -23,8 +24,12 @@ class VAPIService {
     this.phoneNumberId = config.phoneNumberId || process.env.VAPI_PHONE_NUMBER_ID;
     this.apiUrl = 'https://api.vapi.ai/call';
     
+    // Make VAPI optional - warn but don't throw if missing
     if (!this.apiKey) {
-      throw new Error('VAPI API key is required');
+      logger.warn('[VAPIService] VAPI_API_KEY not configured - VAPI calls will not work');
+      this.enabled = false;
+    } else {
+      this.enabled = true;
     }
   }
 
@@ -34,7 +39,7 @@ class VAPIService {
    * @param {Object} params - Call parameters
    * @param {string} params.phoneNumber - Recipient phone number
    * @param {string} params.leadName - Lead name for personalization
-   * @param {string} params.agentId - Agent ID (if "24" or "VAPI", use VAPI)
+   * @param {string} params.agentId - Agent ID (if "VAPI", use VAPI)
    * @param {string} params.addedContext - Additional context for the call
    * @param {Object} params.assistantOverrides - Assistant configuration overrides
    * @returns {Promise<Object>} VAPI call response
@@ -159,8 +164,9 @@ class VAPIService {
    * @returns {boolean} Should use VAPI
    */
   shouldUseVAPI(agentId) {
-    // VAPI routing: agent_id === "24" or "VAPI"
-    return agentId === '24' || agentId === 'VAPI' || agentId === 24;
+    // VAPI routing: only for explicit "VAPI" agent (removed hardcoded agent 24)
+    const isVAPIAgent = agentId === 'VAPI';
+    return isVAPIAgent && this.enabled;
   }
 
   /**
