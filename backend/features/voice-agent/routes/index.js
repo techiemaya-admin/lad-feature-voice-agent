@@ -7,10 +7,10 @@
 
 const express = require('express');
 const router = express.Router();
-const { 
-  VoiceAgentController, 
-  CallController, 
-  BatchCallController, 
+const {
+  VoiceAgentController,
+  CallController,
+  BatchCallController,
   CallInitiationController,
   LeadTagsController,
   CallCancellationController,
@@ -271,6 +271,16 @@ router.post(
 );
 
 /**
+ * GET /calls/:call_log_id/lead
+ * Get the lead associated with a specific call log
+ */
+router.get(
+  '/calls/:call_log_id/lead',
+  jwtAuth,
+  (req, res) => callController.getLeadByCallLogId(req, res)
+);
+
+/**
  * GET /calls/:id
  * Get a single call log by ID
  */
@@ -452,6 +462,35 @@ router.get(
   '/calls/status/:resource_id',
   tenantMiddleware,
   (req, res) => callCancellationController.getCallStatus(req, res)
+);
+
+/**
+ * GET /batch-view
+ * Get all batches ordered by updated_at (latest first)
+ */
+router.get(
+  '/batch-view',
+  tenantMiddleware,
+  (req, res) => batchCallController.getBatchesView(req, res)
+);
+
+/**
+ * GET /batch/stats
+ */
+router.get(
+  '/batch/stats',
+  tenantMiddleware,
+  (req, res) => batchCallController.getBatchStats(req, res)
+);
+
+/**
+ * GET /batch-id/:batch_id
+ * Get batch details with call logs for a specific batch_id
+ */
+router.get(
+  '/batch-id/:batch_id',
+  tenantMiddleware,
+  (req, res) => batchCallController.getBatchById(req, res)
 );
 
 module.exports = router;

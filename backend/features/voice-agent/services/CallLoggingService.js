@@ -48,7 +48,7 @@ class CallLoggingService {
     const phoneMatch = toNumber.match(/^(\+\d{1,4})(\d+)$/);
     const toCountryCode = phoneMatch ? phoneMatch[1] : '+1';
     const toBaseNumber = phoneMatch ? phoneMatch[2] : toNumber.replace(/\D/g, '');
-    
+
     const callLog = await this.callModel.createCallLog({
       schema,
       tenantId,
@@ -107,12 +107,12 @@ class CallLoggingService {
         // Log failed calls too
         continue;
       }
-      
+
       // Parse phone number
       const phoneMatch = entry.phoneNumber.match(/^(\+\d{1,4})(\d+)$/);
       const toCountryCode = phoneMatch ? phoneMatch[1] : '+1';
       const toBaseNumber = phoneMatch ? phoneMatch[2] : entry.phoneNumber.replace(/\D/g, '');
-      
+
       const callLog = await this.callModel.createCallLog({
         schema,
         tenantId,
@@ -163,6 +163,18 @@ class CallLoggingService {
    */
   async getCallLog(schema, callId, tenantId) {
     return this.callModel.getCallById(schema, callId, tenantId);
+  }
+
+  /**
+   * Get the lead linked to a specific call log
+   *
+   * @param {string} schema - Schema name
+   * @param {string} callLogId - Call log ID
+   * @param {string} tenantId - Tenant ID
+   * @returns {Promise<Object|null>} Lead row or null
+   */
+  async getLeadByCallLogId(schema, callLogId, tenantId) {
+    return this.callModel.getLeadByCallLogId(schema, callLogId, tenantId);
   }
 
   /**

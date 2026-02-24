@@ -38,6 +38,7 @@ module.exports = {
     '/calls/job/:job_id',
     '/batch/batch-status/:id',
     '/batch/batch-cancel/:id'
+    
   ],
   
   description: 'AI-powered voice calling system. Initiate single or batch calls, manage voice agents, retrieve recordings, and handle call logging.',

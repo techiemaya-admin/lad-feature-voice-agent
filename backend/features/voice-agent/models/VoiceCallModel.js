@@ -101,7 +101,8 @@ class VoiceCallModel {
    * @param {string} tenantId - Tenant ID for isolation
    * @returns {Promise<Object|null>} Call log or null
    */
-  async getCallById(schema, callId, tenantId) {
+
+    async getCallById(schema, callId, tenantId) {
     // First, get transcripts separately to avoid truncation in large row
     const transcriptsQuery = `
       SELECT transcripts
@@ -142,10 +143,10 @@ class VoiceCallModel {
         vcl.metadata,
         l.first_name AS lead_first_name,
         l.last_name AS lead_last_name,
-        l.tags AS lead_tags
+        vca.analysis
       FROM ${schema}.voice_call_logs vcl
-      LEFT JOIN ${schema}.leads l ON l.id = vcl.lead_id AND l.tenant_id = vcl.tenant_id
-      LEFT JOIN ${schema}.voice_agents va ON va.id = vcl.agent_id::bigint AND va.tenant_id = vcl.tenant_id
+      LEFT JOIN ${schema}.leads l ON l.id = vcl.lead_id
+      LEFT JOIN ${schema}.voice_agents va ON va.id = vcl.agent_id AND va.tenant_id = vcl.tenant_id
       LEFT JOIN LATERAL (
         SELECT jsonb_build_object(
           'id', vca_row.id,
@@ -469,7 +470,7 @@ class VoiceCallModel {
 
     const result = await this.pool.query(query, values);
     const stats = result.rows[0];
-    
+
     // Convert string numbers to integers
     return {
       total_calls: parseInt(stats.total_calls, 10) || 0,
@@ -554,6 +555,29 @@ class VoiceCallModel {
 
     const result = await this.pool.query(query, values);
     return result.rows[0];
+  }
+  /**
+   * Get the lead associated with a specific call log
+   *
+   * @param {string} schema - Schema name
+   * @param {string} callLogId - voice_call_logs primary key
+   * @param {string} tenantId - Tenant ID for isolation
+   * @returns {Promise<Object|null>} Lead row or null
+   */
+  async getLeadByCallLogId(schema, callLogId, tenantId) {
+    const query = `
+      SELECT l.*
+      FROM ${schema}.voice_call_logs vcl
+      JOIN ${schema}.leads l
+        ON l.id = vcl.lead_id
+        AND l.tenant_id = vcl.tenant_id
+      WHERE vcl.id = $1
+        AND vcl.tenant_id = $2
+      LIMIT 1
+    `;
+
+    const result = await this.pool.query(query, [callLogId, tenantId]);
+    return result.rows[0] || null;
   }
 }
 

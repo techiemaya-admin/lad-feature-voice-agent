@@ -298,9 +298,9 @@ class CallController {
       // Get total count and paginated results
       const { calls, total } = await this.callLoggingService.getCallLogs(
         schema,
-        tenantId, 
-        filters, 
-        pageSize, 
+        tenantId,
+        filters,
+        pageSize,
         offset
       );
 
@@ -369,7 +369,7 @@ class CallController {
       logger.info(`[CallController] Call log fetched for ${call_log_id}`);
       logger.info(`[CallController] Transcripts segments in DB result: ${callLog.transcripts?.segments?.length || 0}`);
       logger.info(`[CallController] Full transcripts object keys: ${callLog.transcripts ? Object.keys(callLog.transcripts).join(', ') : 'none'}`);
-      
+
       // Check if user has access to this call log
       const user = req.user;
       const isAdmin = user?.role === 'admin';
@@ -390,16 +390,16 @@ class CallController {
       if (callLog.recording_url) {
         try {
           const signingEndpoint = `${process.env.BASE_URL}/recordings/calls/${callLog.recording_url}/signed-url`;
-          const response = await axios.get(signingEndpoint, { 
-            headers: { 
-              'Content-Type': 'application/json', 
-              'X-Frontend-ID': process.env.BASE_URL_FRONTEND_HEADER, 
-              'X-API-Key': process.env.BASE_URL_FRONTEND_APIKEY 
-            } 
+          const response = await axios.get(signingEndpoint, {
+            headers: {
+              'Content-Type': 'application/json',
+              'X-Frontend-ID': process.env.BASE_URL_FRONTEND_HEADER,
+              'X-API-Key': process.env.BASE_URL_FRONTEND_APIKEY
+            }
           });
 
           const signedUrl = response?.data?.signed_url || response?.data?.url || response?.data;
-          
+
           if (signedUrl && typeof signedUrl === 'string') {
             callLog.signed_recording_url = signedUrl;
           }
@@ -447,7 +447,7 @@ class CallController {
 
       // Try to get from local database first
       const localLog = await this.callModel.getCallLogById(job_id);
-      
+
       if (localLog) {
         return res.json({
           success: true,
@@ -472,7 +472,7 @@ class CallController {
 
       try {
         const response = await axios.get(`${baseUrl}/calls/job/${job_id}`, { headers });
-        
+
         return res.json({
           success: true,
           log: response.data
@@ -488,11 +488,11 @@ class CallController {
       }
 
     } catch (error) {
-      logger.error('[CallController] V2 getCallLogByJobId failed', { 
-        error: error.message, 
-        job_id: req.params.job_id 
+      logger.error('[CallController] V2 getCallLogByJobId failed', {
+        error: error.message,
+        job_id: req.params.job_id
       });
-      
+
       return res.status(500).json({
         success: false,
         error: 'Failed to fetch call log',
@@ -529,9 +529,9 @@ class CallController {
       // Get all completed calls for this tenant
       const completedCalls = await this.callModel.getCompletedCallsForTenant(schema, tenantId);
 
-      logger.info('[CallController] Found completed calls', { 
-        tenantId, 
-        count: completedCalls.length 
+      logger.info('[CallController] Found completed calls', {
+        tenantId,
+        count: completedCalls.length
       });
 
       if (completedCalls.length === 0) {
@@ -564,7 +564,7 @@ class CallController {
         if (correctCredits !== currentCredits) {
           discrepanciesFound++;
           const creditDifference = correctCredits - currentCredits;
-          
+
           logger.info('[CallController] Credit discrepancy found', {
             call_id: call.id,
             duration_seconds: call.duration_seconds,
@@ -597,7 +597,7 @@ class CallController {
             // Use Credit Guard for billing wallet and ledger updates
             // If creditDifference > 0: we undercharged, need to deduct MORE
             // If creditDifference < 0: we overcharged, need to REFUND (negative deduction)
-            const usageType = creditDifference > 0 
+            const usageType = creditDifference > 0
               ? 'call_credit_reconciliation_charge'
               : 'call_credit_reconciliation_refund';
 
@@ -685,6 +685,79 @@ class CallController {
       return res.status(500).json({
         success: false,
         error: 'Failed to update call credits',
+        message: error.message
+      });
+    }
+  }
+
+  /**
+   * GET /calls/:call_log_id/lead
+   * Get a call log's full details (with analysis & transcripts) plus the complete lead record
+   */
+  async getLeadByCallLogId(req, res) {
+    try {
+      const tenantId = req.tenantId || req.user?.tenantId;
+      const schema = getSchema(req);
+      const { call_log_id } = req.params;
+
+      if (!call_log_id) {
+        return res.status(400).json({
+          success: false,
+          error: 'call_log_id parameter is required'
+        });
+      }
+
+      // 1. Fetch full call log (analysis + transcripts via getCallById)
+      const callLog = await this.callLoggingService.getCallLog(schema, call_log_id, tenantId);
+
+      if (!callLog) {
+        return res.status(404).json({
+          success: false,
+          error: 'Call log not found'
+        });
+      }
+
+      // 2. Fetch the full lead record from the leads table
+      const lead = await this.callLoggingService.getLeadByCallLogId(schema, call_log_id, tenantId);
+
+      // 3. Attach signed recording URL (same as getCallLogById)
+      if (callLog.recording_url) {
+        try {
+          const signingEndpoint = `${process.env.BASE_URL}/recordings/calls/${callLog.recording_url}/signed-url`;
+          const response = await axios.get(signingEndpoint, {
+            headers: {
+              'Content-Type': 'application/json',
+              'X-Frontend-ID': process.env.BASE_URL_FRONTEND_HEADER,
+              'X-API-Key': process.env.BASE_URL_FRONTEND_APIKEY
+            }
+          });
+          const signedUrl = response?.data?.signed_url || response?.data?.url || response?.data;
+          if (signedUrl && typeof signedUrl === 'string') {
+            callLog.signed_recording_url = signedUrl;
+          }
+        } catch (urlError) {
+          logger.error('[CallController] Error generating signed URL in getLeadByCallLogId:', urlError.message);
+          // Non-fatal — continue without signed URL
+        }
+      }
+
+      // 4. Return full call log data + complete lead record
+      return res.json({
+        success: true,
+        data: {
+          ...callLog,
+          lead: lead || null
+        }
+      });
+
+    } catch (error) {
+      logger.error('[CallController] getLeadByCallLogId failed', {
+        error: error.message,
+        call_log_id: req.params.call_log_id
+      });
+      return res.status(500).json({
+        success: false,
+        error: 'Failed to fetch lead for call log',
         message: error.message
       });
     }
