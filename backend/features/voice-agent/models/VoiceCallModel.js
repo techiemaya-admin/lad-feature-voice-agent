@@ -147,22 +147,7 @@ class VoiceCallModel {
       LEFT JOIN ${schema}.leads l ON l.id = vcl.lead_id
       LEFT JOIN ${schema}.voice_agents va ON va.id = vcl.agent_id AND va.tenant_id = vcl.tenant_id
       LEFT JOIN LATERAL (
-        SELECT jsonb_build_object(
-          'id', vca_row.id,
-          'call_log_id', vca_row.call_log_id,
-          'summary', COALESCE(NULLIF(vca_row.summary, ''), vca_row.raw_analysis->'sentiment_full'->>'sentiment_description', vca_row.sentiment),
-          'sentiment', vca_row.sentiment,
-          'disposition', COALESCE(vca_row.raw_analysis->'disposition_full'->>'disposition', ''),
-          'recommendations', COALESCE(vca_row.recommendations, vca_row.recommended_action, vca_row.raw_analysis->'disposition_full'->>'recommended_action', ''),
-          'key_points', vca_row.key_points,
-          'lead_extraction', vca_row.lead_extraction,
-          'prospect_questions', vca_row.prospect_questions,
-          'prospect_concerns', vca_row.prospect_concerns,
-          'key_phrases', vca_row.key_phrases,
-          'raw_analysis', vca_row.raw_analysis,
-          'analysis_cost', vca_row.analysis_cost,
-          'created_at', vca_row.created_at
-        ) AS analysis
+        SELECT row_to_json(vca_row) AS analysis
         FROM ${schema}.voice_call_analysis vca_row
         WHERE vca_row.call_log_id = vcl.id
         ORDER BY vca_row.created_at DESC NULLS LAST

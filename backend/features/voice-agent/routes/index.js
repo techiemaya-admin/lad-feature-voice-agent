@@ -13,19 +13,14 @@ const {
   BatchCallController, 
   CallInitiationController 
 } = require('../controllers');
-const VAPIWebhookController = require('../controllers/VAPIWebhookController');
 const { pool } = require('../../../shared/database/connection');
 const { authenticateToken: jwtAuth } = require('../../../core/middleware/auth');
-const { requireCredits } = require('../../../shared/middleware/credit_guard');
-const { requireFeature } = require('../../../shared/middleware/feature_guard');
-const { validateVoiceCallPrerequisites } = require('../middleware/voiceCallValidation');
 
 // Initialize controllers with shared database pool
 const voiceAgentController = new VoiceAgentController(pool);
 const callController = new CallController(pool);
 const batchCallController = new BatchCallController(pool);
 const callInitiationController = new CallInitiationController(pool);
-const vapiWebhookController = new VAPIWebhookController(pool);
 
 // Tenant middleware - extracts tenant ID from request
 const tenantMiddleware = (req, res, next) => {
@@ -190,12 +185,10 @@ router.get(
 /**
  * POST /calls
  * Initiate a single voice call
- * Requires 1 credit for call initiation (additional credits charged based on duration)
  */
 router.post(
   '/calls',
-  jwtAuth,
-  requireCredits('voice_call', 1),
+  tenantMiddleware,
   (req, res) => callInitiationController.initiateCall(req, res)
 );
 
@@ -206,8 +199,27 @@ router.post(
 router.post(
   '/calls/batch',
   tenantMiddleware,
-  requireCredits(1, 'voice_agent_batch'),
   (req, res) => batchCallController.batchInitiateCalls(req, res)
+);
+
+/**
+ * GET /calllogs
+ * Get call logs (for testing / general listing)
+ */
+router.get(
+  '/calllogs',
+  tenantMiddleware,
+  (req, res) => callController.getCallLogs(req, res)
+);
+
+/**
+ * GET /calllogs/:call_log_id
+ * Get a single call log by ID
+ */
+router.get(
+  '/calllogs/:call_log_id',
+  jwtAuth,
+  (req, res) => callController.getCallLogById(req, res)
 );
 
 /**
@@ -240,51 +252,6 @@ router.get(
   (req, res) => callController.getCallStats(req, res)
 );
 
-/**
- * POST /calls/update-credits
- * Recalculate and update credits for completed calls
- * Used for credit reconciliation
- */
-router.post(
-  '/calls/update-credits',
-  jwtAuth,
-  (req, res) => callController.updateCallCredits(req, res)
-);
-
-/**
- * GET /calls/:id
- * Get a single call log by ID
- */
-router.get(
-  '/calls/:id',
-  jwtAuth,
-  (req, res) => {
-    // Map :id param to :call_log_id for the controller
-    req.params.call_log_id = req.params.id;
-    return callController.getCallLogById(req, res);
-  }
-);
-
-/**
- * GET /calllogs
- * Get call logs (for testing / general listing)
- */
-router.get(
-  '/calllogs',
-  tenantMiddleware,
-  (req, res) => callController.getCallLogs(req, res)
-);
-
-/**
- * GET /calllogs/:call_log_id
- * Get a single call log by ID
- */
-router.get(
-  '/calllogs/:call_log_id',
-  jwtAuth,
-  (req, res) => callController.getCallLogById(req, res)
-);
-
 // ============================================
 // Phone Resolution & Sales Summary
 // ============================================
@@ -310,48 +277,16 @@ router.post(
 );
 
 // ============================================
-// Webhook Endpoints
-// ============================================
-
-/**
- * POST /webhook/vapi
- * Receive webhooks from VAPI for call status updates and billing
- * This endpoint processes call completion events and charges credits based on duration
- * 
- * VAPI Events:
- * - call.started: Call has been initiated
- * - call.ended: Call completed (triggers credit deduction)
- * - call.failed: Call failed (triggers credit refund)
- * 
- * No authentication required (VAPI webhook signature verification should be added)
- */
-router.post(
-  '/webhook/vapi',
-  (req, res) => vapiWebhookController.handleVAPIWebhook(req, res)
-);
-
-// ============================================
 // V2 API Endpoints
 // ============================================
 
 /**
  * POST /calls/start-call (V2)
  * Initiate a single voice call - V2 endpoint with UUID support
- * 
- * MIDDLEWARE PIPELINE (LAD Architecture Compliant):
- * 1. jwtAuth - Authenticate user & extract tenantId/userId from JWT
- * 2. requireFeature - Verify tenant has 'voice-agent' feature enabled
- * 3. validateVoiceCallPrerequisites - Check business hours, credits (3 min), rate limits
- * 4. callInitiationController.initiateCallV2 - Execute call
- * 
- * NOTE: requireCredits removed as credit check happens in validateVoiceCallPrerequisites
- * (Credits deducted after call completion based on actual duration)
  */
 router.post(
   '/calls/start-call',
-  jwtAuth,
-  requireFeature('voice-agent'),
-  validateVoiceCallPrerequisites,
+  tenantMiddleware,
   (req, res) => callInitiationController.initiateCallV2(req, res)
 );
 
