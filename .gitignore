@@ -22,3 +22,7 @@ Thumbs.db
 
 .vscode/
 .idea/
+
+# Voice Agent documentation files
+backend/features/voice-agent/CURL_COMMANDS.md
+backend/features/voice-agent/README_SETTINGS.md
