@@ -55,10 +55,6 @@ router.post('/login', async (req, res) => {
       });
     }
     
-    // NOTE: if using a demo account, ensure DEMO_PASSWORD is set in
-    // environment variables. Do not rely on a hardcoded literal in
-    // source code; this helps avoid accidental commits of secrets.
-    
     // Get user with tenant info from new schema
     const result = await query(`
       SELECT 
@@ -83,14 +79,8 @@ router.post('/login', async (req, res) => {
     
     const user = result.rows[0];
     
-    // Allow a special demo password if configured via environment variable.
-    // This lets us authenticate temporary or seed accounts without
-    // requiring a hashed password in the database. The value should be
-    // set in env (e.g. DEMO_PASSWORD) and never committed to source.
-    // In all other cases we validate using bcrypt against the stored hash.
-    const DEMO_PASSWORD = process.env.DEMO_PASSWORD;
-    const isValidPassword = (DEMO_PASSWORD && password === DEMO_PASSWORD) ||
-      await bcrypt.compare(password, user.password_hash);
+    // Validate password using bcrypt only
+    const isValidPassword = await bcrypt.compare(password, user.password_hash);
     
     if (!isValidPassword) {
       return res.status(401).json({
