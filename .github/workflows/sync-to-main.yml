@@ -156,7 +156,6 @@ jobs:
             "lad-backend/features/voice-agent/manifest.js"
             "lad-backend/features/voice-agent/index.js"
             "lad-backend/features/voice-agent/routes/index.js"
-            "lad-backend/features/voice-agent/constants.js"
           )
           
           for file in "${CRITICAL_FILES[@]}"; do
