@@ -1,5 +1,6 @@
 const axios = require('axios');
 const { VAPIService } = require('../../services');
+const BatchService = require('../../services/BatchService');
 let logger;
 try {
   logger = require('../../../../core/utils/logger');
@@ -8,10 +9,13 @@ try {
   logger = loggerAdapter.getLogger();
 }
 
+const { getSchema, sanitizeSchema } = require('../../../../core/utils/schemaHelper');
+
 class BatchCallController {
   constructor(db) {
     this.vapiService = new VAPIService();
     this.db = db;
+    this.batchService = new BatchService(db);
   }
 
   /**
@@ -101,7 +105,7 @@ class BatchCallController {
           });
         } catch (forwardError) {
           logger.error('Error forwarding batch call data to remote API:', forwardError.message);
-          
+
           return res.status(502).json({
             success: false,
             error: 'Failed to forward batch calls to remote API',
@@ -203,8 +207,8 @@ class BatchCallController {
         user_id: userId
       };
 
-      logger.info('[BatchCallController] V2 payload prepared', { 
-        batchPayload: { ...batchPayload, entries: `${entries.length} entries` } 
+      logger.info('[BatchCallController] V2 payload prepared', {
+        batchPayload: { ...batchPayload, entries: `${entries.length} entries` }
       });
 
       // Use existing VAPI service or forward to external service
@@ -232,7 +236,7 @@ class BatchCallController {
         };
 
         const response = await axios.post(`${baseUrl}/batch/trigger-batch-call`, batchPayload, { headers });
-        
+
         return res.json({
           success: true,
           result: response.data,
@@ -241,12 +245,12 @@ class BatchCallController {
       }
 
     } catch (error) {
-      logger.error('[BatchCallController] V2 batchInitiateCalls failed', { 
-        error: error.message, 
+      logger.error('[BatchCallController] V2 batchInitiateCalls failed', {
+        error: error.message,
         stack: error.stack,
-        body: req.body 
+        body: req.body
       });
-      
+
       return res.status(500).json({
         success: false,
         error: 'Failed to initiate batch calls',
@@ -264,7 +268,7 @@ class BatchCallController {
     try {
       const { id } = req.params;
       const tenantId = req.tenantId || req.user?.tenantId;
-      const schema = req.schema || process.env.POSTGRES_SCHEMA || 'lad_dev';
+      const schema = sanitizeSchema(getSchema(req));
 
       logger.info('[BatchCallController] V2 getBatchStatus called', { id, tenantId, schema });
 
@@ -320,8 +324,8 @@ class BatchCallController {
 
         if (result.rows.length > 0) {
           const batch = result.rows[0];
-          logger.info('[BatchCallController] Found batch in local database', { 
-            id, 
+          logger.info('[BatchCallController] Found batch in local database', {
+            id,
             status: batch.status,
             totalCalls: batch.total_calls
           });
@@ -351,8 +355,8 @@ class BatchCallController {
 
         logger.info('[BatchCallController] Batch not found in local database, checking external service', { id });
       } catch (dbError) {
-        logger.warn('[BatchCallController] Database query failed, falling back to external service', { 
-          error: dbError.message 
+        logger.warn('[BatchCallController] Database query failed, falling back to external service', {
+          error: dbError.message
         });
       }
 
@@ -371,14 +375,14 @@ class BatchCallController {
         'X-API-Key': process.env.BASE_URL_FRONTEND_APIKEY || ''
       };
 
-      logger.info('[BatchCallController] Calling external service', { 
+      logger.info('[BatchCallController] Calling external service', {
         url: `${baseUrl}/batch/batch-status/${id}`,
         headers: { ...headers, 'X-API-Key': '***' }
       });
 
       const response = await axios.get(`${baseUrl}/batch/batch-status/${id}`, { headers });
-      
-      logger.info('[BatchCallController] External service response received', { 
+
+      logger.info('[BatchCallController] External service response received', {
         status: response.status,
         hasData: !!response.data
       });
@@ -390,14 +394,14 @@ class BatchCallController {
       });
 
     } catch (error) {
-      logger.error('[BatchCallController] V2 getBatchStatus failed', { 
+      logger.error('[BatchCallController] V2 getBatchStatus failed', {
         error: error.message,
         response: error.response?.data,
         status: error.response?.status,
         batchId: req.params.id,
         url: error.config?.url
       });
-      
+
       return res.status(500).json({
         success: false,
         error: 'Failed to get batch status',
@@ -440,7 +444,7 @@ class BatchCallController {
       };
 
       const response = await axios.post(`${baseUrl}/batch/batch-cancel/${id}`, {}, { headers });
-      
+
       return res.json({
         success: true,
         result: response.data,
@@ -448,14 +452,141 @@ class BatchCallController {
       });
 
     } catch (error) {
-      logger.error('[BatchCallController] V2 cancelBatch failed', { 
-        error: error.message, 
-        batchId: req.params.id 
+      logger.error('[BatchCallController] V2 cancelBatch failed', {
+        error: error.message,
+        batchId: req.params.id
       });
-      
+
       return res.status(500).json({
         success: false,
         error: 'Failed to cancel batch',
+        message: error.message
+      });
+    }
+  }
+
+  /**
+   * GET /batch-view
+   * Get all batches ordered by updated_at (latest first)
+   */
+  async getBatchesView(req, res) {
+    try {
+      const tenantId = req.tenantId || req.user?.tenantId;
+      const schema = getSchema(req);
+      const { page, limit } = req.query;
+
+      // Pagination parameters
+      const currentPage = page ? parseInt(page, 10) : 1;
+      const pageSize = limit ? parseInt(limit, 10) : 50;
+      const offset = (currentPage - 1) * pageSize;
+
+      const result = await this.batchService.getBatchesView(tenantId, schema, pageSize, offset);
+
+      const totalPages = Math.ceil(result.total / pageSize);
+
+      return res.status(200).json({
+        success: true,
+        data: result.data,
+        count: result.data.length,
+        pagination: {
+          page: currentPage,
+          limit: pageSize,
+          total: result.total,
+          totalPages: totalPages,
+          hasNextPage: currentPage < totalPages,
+          hasPreviousPage: currentPage > 1
+        }
+      });
+
+    } catch (error) {
+      logger.error('[BatchCallController] getBatchesView failed', {
+        error: error.message,
+        tenantId: req.tenantId || req.user?.tenantId
+      });
+
+      return res.status(500).json({
+        success: false,
+        error: 'Failed to fetch batches',
+        message: error.message
+      });
+    }
+  }
+
+  /**
+   * GET /batch-id/:batch_id
+   * Get batch details with call logs for a specific batch_id
+   */
+  async getBatchById(req, res) {
+    try {
+      const tenantId = req.tenantId || req.user?.tenantId;
+      const schema = getSchema(req);
+      const { batch_id } = req.params;
+      const { page, limit } = req.query;
+
+      // Pagination parameters
+      const currentPage = page ? parseInt(page, 10) : 1;
+      const pageSize = limit ? parseInt(limit, 10) : 50;
+      const offset = (currentPage - 1) * pageSize;
+
+      const result = await this.batchService.getBatchById(batch_id, tenantId, schema, pageSize, offset);
+
+      if (!result.success) {
+        return res.status(404).json(result);
+      }
+
+      const totalPages = Math.ceil(result.data.total / pageSize);
+
+      return res.status(200).json({
+        success: true,
+        data: result.data.call_logs,
+        batch_id: result.data.batch_id,
+        count: result.data.call_logs.length,
+        pagination: {
+          page: currentPage,
+          limit: pageSize,
+          total: result.data.total,
+          totalPages: totalPages,
+          hasNextPage: currentPage < totalPages,
+          hasPreviousPage: currentPage > 1
+        }
+      });
+
+    } catch (error) {
+      logger.error('[BatchCallController] getBatchById failed', {
+        error: error.message,
+        batch_id: req.params.batch_id,
+        tenantId: req.tenantId || req.user?.tenantId
+      });
+
+      return res.status(500).json({
+        success: false,
+        error: 'Failed to fetch batch details',
+        message: error.message
+      });
+    }
+  }
+
+  /**
+   * GET /batch/stats
+   * Get batch statistics for a tenant
+   */
+  async getBatchStats(req, res) {
+    try {
+      const tenantId = req.tenantId || req.user?.tenantId;
+      const schema = getSchema(req);
+
+      const result = await this.batchService.getBatchStats(tenantId, schema);
+
+      return res.status(200).json(result);
+
+    } catch (error) {
+      logger.error('[BatchCallController] getBatchStats failed', {
+        error: error.message,
+        tenantId: req.tenantId || req.user?.tenantId
+      });
+      return res.status(500).json({
+        success: false,
+        error: 'Failed to fetch batch statistics',
         message: error.message
       });
     }

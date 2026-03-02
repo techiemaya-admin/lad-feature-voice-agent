@@ -8,6 +8,8 @@ require('dotenv')
 const axios = require('axios');
 const { VoiceCallModel, PhoneResolverModel, VoiceAgentModel } = require('../models');
 const { VAPIService, CallLoggingService, RecordingService } = require('../services');
+const { getSchema } = require('../../../core/utils/schemaHelper');
+const { deductCredits } = require('../../../shared/middleware/credit_guard');
 let logger;
 try {
   logger = require('../../../core/utils/logger');
@@ -197,6 +199,7 @@ class CallController {
   async getRecentCalls(req, res) {
     try {
       const tenantId = req.tenantId || req.user?.tenantId;
+      const schema = getSchema(req);
       const { status, agent_id, start_date } = req.query;
 
       const filters = {};
@@ -215,7 +218,7 @@ class CallController {
         filters.userId = user.id;
       }
 
-      const calls = await this.callLoggingService.getRecentCalls(tenantId, filters);
+      const calls = await this.callLoggingService.getRecentCalls(schema, tenantId, filters);
 
       res.json({
         success: true,
@@ -239,17 +242,18 @@ class CallController {
   async getCallStats(req, res) {
     try {
       const tenantId = req.tenantId || req.user?.tenantId;
+      const schema = getSchema(req);
       const { start_date, end_date } = req.query;
 
       const dateRange = {};
       if (start_date) dateRange.startDate = new Date(start_date);
       if (end_date) dateRange.endDate = new Date(end_date);
 
-      const stats = await this.callLoggingService.getCallStats(tenantId, dateRange);
+      const stats = await this.callLoggingService.getCallStats(schema, tenantId, dateRange);
 
       res.json({
         success: true,
-        data: stats
+        stats
       });
     } catch (error) {
       logger.error('Get call stats error:', error);
@@ -262,18 +266,21 @@ class CallController {
   }
 
   /**
-   * GET /calllogs
-   * Get call logs with filters
+   * GET /calls
+   * Get call logs with filters and pagination
    */
   async getCallLogs(req, res) {
     try {
       const tenantId = req.tenantId || req.user?.tenantId;
-      const { status, agent_id, start_date, limit } = req.query;
+      const schema = getSchema(req);
+      const { status, agent_id, start_date, from_date, to_date, page, limit } = req.query;
 
       const filters = {};
       if (status) filters.status = status;
       if (agent_id) filters.agentId = agent_id;
       if (start_date) filters.startDate = new Date(start_date);
+      if (from_date) filters.fromDate = new Date(from_date);
+      if (to_date) filters.toDate = new Date(to_date);
 
       const user = req.user;
       const isAdmin = user?.role === 'admin';
@@ -283,14 +290,34 @@ class CallController {
         filters.userId = user.id;
       }
 
-      const parsedLimit = limit ? parseInt(limit, 10) : 50;
-      const calls = await this.callLoggingService.getCallLogs(tenantId, filters, parsedLimit);
+      // Pagination parameters
+      const currentPage = page ? parseInt(page, 10) : 1;
+      const pageSize = limit ? parseInt(limit, 10) : 50;
+      const offset = (currentPage - 1) * pageSize;
+
+      // Get total count and paginated results
+      const { calls, total } = await this.callLoggingService.getCallLogs(
+        schema,
+        tenantId,
+        filters,
+        pageSize,
+        offset
+      );
+
+      const totalPages = Math.ceil(total / pageSize);
 
       res.json({
         success: true,
         logs: calls,
-        data: calls,
-        count: calls.length
+        count: calls.length,
+        pagination: {
+          page: currentPage,
+          limit: pageSize,
+          total: total,
+          totalPages: totalPages,
+          hasNextPage: currentPage < totalPages,
+          hasPreviousPage: currentPage > 1
+        }
       });
     } catch (error) {
       logger.error('Get call logs error:', error);
@@ -300,18 +327,27 @@ class CallController {
         logs: [],
         data: [],
         count: 0,
+        pagination: {
+          page: 1,
+          limit: 50,
+          total: 0,
+          totalPages: 0,
+          hasNextPage: false,
+          hasPreviousPage: false
+        },
         warning: 'Voice agent tables not yet migrated'
       });
     }
   }
 
   /**
-   * GET /calllogs/:call_log_id
+   * GET /call/:call_log_id
    * Get a single call log by ID with signed recording URL
    */
   async getCallLogById(req, res) {
     try {
       const tenantId = req.tenantId || req.user?.tenantId;
+      const schema = getSchema(req);
       const { call_log_id } = req.params;
 
       if (!call_log_id) {
@@ -321,7 +357,7 @@ class CallController {
         });
       }
 
-      const callLog = await this.callLoggingService.getCallLog(call_log_id, tenantId);
+      const callLog = await this.callLoggingService.getCallLog(schema, call_log_id, tenantId);
 
       if (!callLog) {
         return res.status(404).json({
@@ -333,7 +369,7 @@ class CallController {
       logger.info(`[CallController] Call log fetched for ${call_log_id}`);
       logger.info(`[CallController] Transcripts segments in DB result: ${callLog.transcripts?.segments?.length || 0}`);
       logger.info(`[CallController] Full transcripts object keys: ${callLog.transcripts ? Object.keys(callLog.transcripts).join(', ') : 'none'}`);
-      
+
       // Check if user has access to this call log
       const user = req.user;
       const isAdmin = user?.role === 'admin';
@@ -354,16 +390,16 @@ class CallController {
       if (callLog.recording_url) {
         try {
           const signingEndpoint = `${process.env.BASE_URL}/recordings/calls/${callLog.recording_url}/signed-url`;
-          const response = await axios.get(signingEndpoint, { 
-            headers: { 
-              'Content-Type': 'application/json', 
-              'X-Frontend-ID': process.env.BASE_URL_FRONTEND_HEADER, 
-              'X-API-Key': process.env.BASE_URL_FRONTEND_APIKEY 
-            } 
+          const response = await axios.get(signingEndpoint, {
+            headers: {
+              'Content-Type': 'application/json',
+              'X-Frontend-ID': process.env.BASE_URL_FRONTEND_HEADER,
+              'X-API-Key': process.env.BASE_URL_FRONTEND_APIKEY
+            }
           });
 
           const signedUrl = response?.data?.signed_url || response?.data?.url || response?.data;
-          
+
           if (signedUrl && typeof signedUrl === 'string') {
             callLog.signed_recording_url = signedUrl;
           }
@@ -411,7 +447,7 @@ class CallController {
 
       // Try to get from local database first
       const localLog = await this.callModel.getCallLogById(job_id);
-      
+
       if (localLog) {
         return res.json({
           success: true,
@@ -436,7 +472,7 @@ class CallController {
 
       try {
         const response = await axios.get(`${baseUrl}/calls/job/${job_id}`, { headers });
-        
+
         return res.json({
           success: true,
           log: response.data
@@ -452,14 +488,276 @@ class CallController {
       }
 
     } catch (error) {
-      logger.error('[CallController] V2 getCallLogByJobId failed', { 
-        error: error.message, 
-        job_id: req.params.job_id 
+      logger.error('[CallController] V2 getCallLogByJobId failed', {
+        error: error.message,
+        job_id: req.params.job_id
       });
-      
+
       return res.status(500).json({
         success: false,
         error: 'Failed to fetch call log',
+        message: error.message
+      });
+    }
+  }
+
+  /**
+   * Update/Recalculate credits for completed calls
+   * 
+   * This endpoint recalculates credits for all completed/ended calls based on their duration.
+   * Formula: Math.ceil(duration_seconds / 60) * 3 credits per minute
+   * 
+   * Use case: Credit reconciliation after calls complete
+   * 
+   * @route POST /api/voiceagents/calls/update-credits
+   * @access Protected (requires authentication)
+   */
+  async updateCallCredits(req, res) {
+    try {
+      const tenantId = req.user?.tenantId;
+      const schema = getSchema(req);
+
+      if (!tenantId) {
+        return res.status(400).json({
+          success: false,
+          error: 'Tenant context required'
+        });
+      }
+
+      logger.info('[CallController] Starting credit reconciliation', { tenantId, schema });
+
+      // Get all completed calls for this tenant
+      const completedCalls = await this.callModel.getCompletedCallsForTenant(schema, tenantId);
+
+      logger.info('[CallController] Found completed calls', {
+        tenantId,
+        count: completedCalls.length
+      });
+
+      if (completedCalls.length === 0) {
+        return res.json({
+          success: true,
+          message: 'No completed calls found to update',
+          stats: {
+            total_calls_checked: 0,
+            calls_updated: 0,
+            credits_recalculated: 0,
+            discrepancies_found: 0
+          }
+        });
+      }
+
+      // Recalculate credits for each call
+      const CREDITS_PER_MINUTE = 3;
+      const updatedCalls = [];
+      let totalCreditsRecalculated = 0;
+      let totalCreditsAdjusted = 0; // Net adjustment to billing wallet
+      let discrepanciesFound = 0;
+
+      for (const call of completedCalls) {
+        // Calculate correct credits: Math.ceil(duration_seconds / 60) * 3
+        const durationMinutes = Math.ceil(call.duration_seconds / 60);
+        const correctCredits = durationMinutes * CREDITS_PER_MINUTE;
+        const currentCredits = parseFloat(call.credits_charged) || 0;
+
+        // Check if there's a discrepancy
+        if (correctCredits !== currentCredits) {
+          discrepanciesFound++;
+          const creditDifference = correctCredits - currentCredits;
+
+          logger.info('[CallController] Credit discrepancy found', {
+            call_id: call.id,
+            duration_seconds: call.duration_seconds,
+            current_credits: currentCredits,
+            correct_credits: correctCredits,
+            difference: creditDifference
+          });
+
+          try {
+            // Update the call with correct credits
+            const metadataUpdate = {
+              credit_recalculation: {
+                performed_at: new Date().toISOString(),
+                old_credits: currentCredits,
+                new_credits: correctCredits,
+                duration_seconds: call.duration_seconds,
+                duration_minutes: durationMinutes,
+                difference: creditDifference
+              }
+            };
+
+            await this.callModel.updateCallCredits(
+              schema,
+              call.id,
+              tenantId,
+              correctCredits,
+              metadataUpdate
+            );
+
+            // Use Credit Guard for billing wallet and ledger updates
+            // If creditDifference > 0: we undercharged, need to deduct MORE
+            // If creditDifference < 0: we overcharged, need to REFUND (negative deduction)
+            const usageType = creditDifference > 0
+              ? 'call_credit_reconciliation_charge'
+              : 'call_credit_reconciliation_refund';
+
+            await deductCredits(
+              tenantId,
+              'voice-agent',
+              usageType,
+              creditDifference, // Positive = debit, Negative = credit
+              null, // No req object for background reconciliation
+              {
+                callId: call.id,
+                leadId: call.lead_id,
+                stepType: 'credit_adjustment',
+                reconciliation: true,
+                old_credits: currentCredits,
+                new_credits: correctCredits,
+                duration_seconds: call.duration_seconds,
+                duration_minutes: durationMinutes
+              }
+            );
+
+            logger.info('[CallController] Billing updated via Credit Guard', {
+              call_id: call.id,
+              tenant_id: tenantId,
+              credit_adjustment: creditDifference,
+              usage_type: usageType
+            });
+
+            updatedCalls.push({
+              call_id: call.id,
+              old_credits: currentCredits,
+              new_credits: correctCredits,
+              duration_seconds: call.duration_seconds,
+              duration_minutes: durationMinutes,
+              credit_adjustment: creditDifference,
+              billing_updated: true
+            });
+
+            totalCreditsRecalculated += correctCredits;
+            totalCreditsAdjusted += creditDifference;
+
+          } catch (updateError) {
+            logger.error('[CallController] Update failed for call', {
+              call_id: call.id,
+              error: updateError.message
+            });
+            // Continue with next call even if one fails
+          }
+        }
+      }
+
+      logger.info('[CallController] Credit reconciliation completed', {
+        tenantId,
+        total_calls_checked: completedCalls.length,
+        calls_updated: updatedCalls.length,
+        credits_recalculated: totalCreditsRecalculated,
+        credits_adjusted: totalCreditsAdjusted,
+        discrepancies_found: discrepanciesFound
+      });
+
+      return res.json({
+        success: true,
+        message: `Successfully recalculated credits for ${updatedCalls.length} calls`,
+        stats: {
+          total_calls_checked: completedCalls.length,
+          calls_updated: updatedCalls.length,
+          credits_recalculated: totalCreditsRecalculated,
+          credits_adjusted: totalCreditsAdjusted,
+          discrepancies_found: discrepanciesFound
+        },
+        billing: {
+          wallet_debits: totalCreditsAdjusted > 0 ? totalCreditsAdjusted : 0,
+          wallet_credits: totalCreditsAdjusted < 0 ? Math.abs(totalCreditsAdjusted) : 0,
+          net_adjustment: totalCreditsAdjusted
+        },
+        updated_calls: updatedCalls.slice(0, 10) // Return first 10 for review
+      });
+
+    } catch (error) {
+      logger.error('[CallController] Update call credits failed', {
+        error: error.message,
+        stack: error.stack
+      });
+
+      return res.status(500).json({
+        success: false,
+        error: 'Failed to update call credits',
+        message: error.message
+      });
+    }
+  }
+
+  /**
+   * GET /calls/:call_log_id/lead
+   * Get a call log's full details (with analysis & transcripts) plus the complete lead record
+   */
+  async getLeadByCallLogId(req, res) {
+    try {
+      const tenantId = req.tenantId || req.user?.tenantId;
+      const schema = getSchema(req);
+      const { call_log_id } = req.params;
+
+      if (!call_log_id) {
+        return res.status(400).json({
+          success: false,
+          error: 'call_log_id parameter is required'
+        });
+      }
+
+      // 1. Fetch full call log (analysis + transcripts via getCallById)
+      const callLog = await this.callLoggingService.getCallLog(schema, call_log_id, tenantId);
+
+      if (!callLog) {
+        return res.status(404).json({
+          success: false,
+          error: 'Call log not found'
+        });
+      }
+
+      // 2. Fetch the full lead record from the leads table
+      const lead = await this.callLoggingService.getLeadByCallLogId(schema, call_log_id, tenantId);
+
+      // 3. Attach signed recording URL (same as getCallLogById)
+      if (callLog.recording_url) {
+        try {
+          const signingEndpoint = `${process.env.BASE_URL}/recordings/calls/${callLog.recording_url}/signed-url`;
+          const response = await axios.get(signingEndpoint, {
+            headers: {
+              'Content-Type': 'application/json',
+              'X-Frontend-ID': process.env.BASE_URL_FRONTEND_HEADER,
+              'X-API-Key': process.env.BASE_URL_FRONTEND_APIKEY
+            }
+          });
+          const signedUrl = response?.data?.signed_url || response?.data?.url || response?.data;
+          if (signedUrl && typeof signedUrl === 'string') {
+            callLog.signed_recording_url = signedUrl;
+          }
+        } catch (urlError) {
+          logger.error('[CallController] Error generating signed URL in getLeadByCallLogId:', urlError.message);
+          // Non-fatal — continue without signed URL
+        }
+      }
+
+      // 4. Return full call log data + complete lead record
+      return res.json({
+        success: true,
+        data: {
+          ...callLog,
+          lead: lead || null
+        }
+      });
+
+    } catch (error) {
+      logger.error('[CallController] getLeadByCallLogId failed', {
+        error: error.message,
+        call_log_id: req.params.call_log_id
+      });
+      return res.status(500).json({
+        success: false,
+        error: 'Failed to fetch lead for call log',
         message: error.message
       });
     }
