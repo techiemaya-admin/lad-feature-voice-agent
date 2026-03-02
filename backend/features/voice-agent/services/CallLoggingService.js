@@ -67,7 +67,14 @@ class CallLoggingService {
       leadId,
       initiatedByUserId: initiatedByUserId || initiatedBy || null,
       recordingUrl: null, // Will be updated later
-      direction: 'outbound'
+      direction: 'outbound',
+      metadata: {
+        vapiCallId: vapiResponse?.id || null,
+        vapiStatus: vapiResponse?.status || null,
+        vapiAssistantId: vapiResponse?.assistantId || null,
+        vapiPhoneNumberId: vapiResponse?.phoneNumberId || null,
+        createdVia: 'vapi'
+      }
     });
     return callLog;
   }
@@ -191,9 +198,11 @@ class CallLoggingService {
     return this.callModel.getCallLogs(schema, tenantId, filters, 50);
   }
 
-  async getCallLogs(tenantId, filters = {}, limit = 50) {
+  async getCallLogs(tenantId, filters = {}, limit = 50, offset = 0) {
     const schema = getSchema({ user: { tenant_id: tenantId } });
-    return this.callModel.getCallLogs(schema, tenantId, filters, limit);
+    const calls = await this.callModel.getCallLogs(schema, tenantId, filters, limit, offset);
+    const total = await this.callModel.getCallLogsCount(schema, tenantId, filters);
+    return { calls, total };
   }
 
   /**
