@@ -25,18 +25,12 @@ const logger = require('../../../core/utils/logger');
  * Stored in metadata or environment variables
  * Format: { start: '09:00', end: '18:00', timezone: 'Asia/Dubai', days: [1,2,3,4,5] }
  */
-// const DEFAULT_BUSINESS_HOURS = {
-//   start: '00:00', // 12 AM (midnight)
-//   end: '23:59',   // 11:59 PM
-//   timezone: 'Asia/Dubai',
-//   days: [0, 1, 2, 3, 4, 5, 6] // All days (Sunday-Saturday)
-// };
 
 const DEFAULT_BUSINESS_HOURS = {
   start: '8:00', // 7:00 PM
   end: '22:00',   // 8:00 PM
   timezone: 'Asia/Dubai',
-  days: [0, 1, 2, 3, 4, 5, 6] // All days (Sunday-Saturday)
+  days: [ 1, 2, 3, 4, 5] // All days (Monday-Friday)
 };
 /**
  * Check if current time is within business hours
@@ -55,13 +49,12 @@ function isWithinBusinessHours(config = DEFAULT_BUSINESS_HOURS) {
     }).format(now);
 
     const weekdayToNumber = {
-      Sun: 0,
+
       Mon: 1,
       Tue: 2,
       Wed: 3,
       Thu: 4,
       Fri: 5,
-      Sat: 6
     };
 
     const currentDay = weekdayToNumber[weekdayShort];

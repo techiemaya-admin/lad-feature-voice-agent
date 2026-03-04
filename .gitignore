@@ -65,3 +65,9 @@ backend/features/voice-agent/package.json
 
 # Feature-level adapters and utilities (local testing fallbacks only)
 backend/features/voice-agent/utils/
+
+# Voice agent documentation files
+backend/features/voice-agent/VOICE_CALL_VALIDATION.md
+backend/features/voice-agent/README_SETTINGS.md
+backend/features/voice-agent/CURL_COMMANDS.md
+backend/features/voice-agent/CREDIT_RECONCILIATION_API.md
