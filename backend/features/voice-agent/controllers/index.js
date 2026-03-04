@@ -8,10 +8,12 @@ const VoiceAgentController = require('./VoiceAgentController');
 const CallController = require('./CallController');
 const BatchCallController = require('./call-controllers/BatchCallController');
 const CallInitiationController = require('./call-controllers/CallInitiationController');
+const CallCancellationController = require('./CallCancellationController');
 
 module.exports = {
   VoiceAgentController,
   CallController,
   BatchCallController,
-  CallInitiationController
+  CallInitiationController,
+  CallCancellationController
 };
