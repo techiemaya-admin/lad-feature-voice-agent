@@ -11,7 +11,8 @@ const {
   VoiceAgentController, 
   CallController, 
   BatchCallController, 
-  CallInitiationController 
+  CallInitiationController,
+  CallCancellationController,
 } = require('../controllers');
 const VAPIWebhookController = require('../controllers/VAPIWebhookController');
 const { pool } = require('../../../shared/database/connection');
@@ -26,6 +27,7 @@ const callController = new CallController(pool);
 const batchCallController = new BatchCallController(pool);
 const callInitiationController = new CallInitiationController(pool);
 const vapiWebhookController = new VAPIWebhookController(pool);
+const callCancellationController = new CallCancellationController(pool);
 
 // Tenant middleware - extracts tenant ID from request
 const tenantMiddleware = (req, res, next) => {
@@ -393,6 +395,65 @@ router.post(
   '/batch/batch-cancel/:id',
   tenantMiddleware,
   (req, res) => batchCallController.cancelBatchV2(req, res)
+);
+
+// ============================================
+// Call Cancellation Endpoints (Unified)
+// ============================================
+
+/**
+ * POST /calls/cancel
+ * Unified cancellation endpoint for single calls and batches
+ * Auto-detects resource type (call vs batch) based on ID format
+ * 
+ * Request Body:
+ * - resource_id: string or string[] - One or more resource IDs
+ * - force: boolean (default false) - When true, terminates ringing/in-progress calls
+ */
+router.post(
+  '/calls/cancel',
+  tenantMiddleware,
+  (req, res) => callCancellationController.cancelCalls(req, res)
+);
+
+/**
+ * GET /calls/status/:resource_id
+ * Get status of a call or batch
+ * Works for both call UUIDs and batch IDs (batch-xxx)
+ */
+router.get(
+  '/calls/status/:resource_id',
+  tenantMiddleware,
+  (req, res) => callCancellationController.getCallStatus(req, res)
+);
+
+/**
+ * GET /batch-view
+ * Get all batches ordered by updated_at (latest first)
+ */
+router.get(
+  '/batch-view',
+  tenantMiddleware,
+  (req, res) => batchCallController.getBatchesView(req, res)
+);
+
+/**
+ * GET /batch/stats
+ */
+router.get(
+  '/batch/stats',
+  tenantMiddleware,
+  (req, res) => batchCallController.getBatchStats(req, res)
+);
+
+/**
+ * GET /batch-id/:batch_id
+ * Get batch details with call logs for a specific batch_id
+ */
+router.get(
+  '/batch-id/:batch_id',
+  tenantMiddleware,
+  (req, res) => batchCallController.getBatchById(req, res)
 );
 
 module.exports = router;
