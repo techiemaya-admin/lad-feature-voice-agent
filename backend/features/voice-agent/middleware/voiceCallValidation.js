@@ -94,7 +94,7 @@ function isWithinBusinessHours(config = DEFAULT_BUSINESS_HOURS) {
     }
 
     if (process.env.NODE_ENV === 'development' || process.env.LOG_BUSINESS_HOURS === 'true') {
-      logger.info('[Business Hours] Timezone conversion check', {
+      logger.info('[Business Hours]  Timezone conversion check', {
         serverTimeIso: now.toISOString(),
         timeZone,
         tzWeekdayShort: weekdayShort,
