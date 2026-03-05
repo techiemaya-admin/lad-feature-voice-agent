@@ -65,5 +65,3 @@ backend/features/voice-agent/package.json
 
 # Feature-level adapters and utilities (local testing fallbacks only)
 backend/features/voice-agent/utils/
-
-backend/features/voice-agent/.env.example
