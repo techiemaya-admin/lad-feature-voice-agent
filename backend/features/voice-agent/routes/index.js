@@ -35,16 +35,18 @@ const callLogUpdatesController = new CallLogUpdatesController();
 
 // Tenant middleware - extracts tenant ID from request
 const tenantMiddleware = (req, res, next) => {
-  req.tenantId = req.tenantId || req.user?.tenantId;
+  req.tenantId = req.tenantId || 
+                 req.user?.tenantId || 
+                 req.headers['x-tenant-id'] ||
+                 req.query.tenant_id;
 
   if (!req.tenantId) {
     return res.status(400).json({
       success: false,
       error: 'Tenant ID required',
-      message: 'Tenant context required'
+      message: 'Please provide tenant_id in headers or query params'
     });
   }
-
   next();
 };
 

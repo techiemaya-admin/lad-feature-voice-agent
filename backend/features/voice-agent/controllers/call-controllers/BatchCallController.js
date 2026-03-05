@@ -1,6 +1,5 @@
 const axios = require('axios');
-const { VAPIService } = require('../../services');
-const BatchService = require('../../services/BatchService');
+const { VAPIService, BatchService } = require('../../services');
 let logger;
 try {
   logger = require('../../../../core/utils/logger');
