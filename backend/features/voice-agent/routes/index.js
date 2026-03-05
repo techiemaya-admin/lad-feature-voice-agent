@@ -12,7 +12,9 @@ const {
   CallController, 
   BatchCallController, 
   CallInitiationController,
+  LeadTagsController,
   CallCancellationController,
+  CallLogUpdatesController
 } = require('../controllers');
 const VAPIWebhookController = require('../controllers/VAPIWebhookController');
 const { pool } = require('../../../shared/database/connection');
@@ -26,8 +28,10 @@ const voiceAgentController = new VoiceAgentController(pool);
 const callController = new CallController(pool);
 const batchCallController = new BatchCallController(pool);
 const callInitiationController = new CallInitiationController(pool);
+const leadTagsController = new LeadTagsController(pool);
 const vapiWebhookController = new VAPIWebhookController(pool);
 const callCancellationController = new CallCancellationController(pool);
+const callLogUpdatesController = new CallLogUpdatesController();
 
 // Tenant middleware - extracts tenant ID from request
 const tenantMiddleware = (req, res, next) => {
@@ -43,7 +47,6 @@ const tenantMiddleware = (req, res, next) => {
       message: 'Please provide tenant_id in headers or query params'
     });
   }
-
   next();
 };
 
@@ -190,6 +193,22 @@ router.get(
 );
 
 /**
+ * GET /calls/stream
+ * Server-Sent Events (SSE) stream for call log updates
+ */
+router.get(
+  '/calls/stream',
+  jwtAuth,
+  (req, res) => callLogUpdatesController.streamCallLogUpdates(req, res)
+);
+
+router.get(
+  '/call/stream',
+  jwtAuth,
+  (req, res) => callLogUpdatesController.streamCallLogUpdates(req, res)
+);
+
+/**
  * POST /calls
  * Initiate a single voice call
  * Requires 1 credit for call initiation (additional credits charged based on duration)
@@ -254,6 +273,16 @@ router.post(
 );
 
 /**
+ * GET /calls/:call_log_id/lead
+ * Get the lead associated with a specific call log
+ */
+router.get(
+  '/calls/:call_log_id/lead',
+  jwtAuth,
+  (req, res) => callController.getLeadByCallLogId(req, res)
+);
+
+/**
  * GET /calls/:id
  * Get a single call log by ID
  */
@@ -265,6 +294,16 @@ router.get(
     req.params.call_log_id = req.params.id;
     return callController.getCallLogById(req, res);
   }
+);
+
+/**
+ * PATCH /calls/:call_id/lead-tags
+ * Replace lead tags (JSONB array) by resolving lead_id from voice_call_logs(call_id)
+ */
+router.patch(
+  '/calls/:call_id/lead-tags',
+  jwtAuth,
+  (req, res) => leadTagsController.replaceLeadTagsByCallId(req, res)
 );
 
 /**
