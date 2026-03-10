@@ -89,6 +89,75 @@ class CallController {
   }
 
   /**
+   * GET /calls/lead-status
+   * Get call logs filtered by call status and optional lead tag, with pagination
+   */
+  async getCallLogsLeadStatus(req, res) {
+    try {
+      const tenantId = req.tenantId || req.user?.tenantId;
+      const schema = getSchema(req);
+      const { status, lead_tag, page, limit } = req.query;
+
+      const filters = {};
+      if (status) filters.status = status;
+      if (lead_tag) filters.leadTag = lead_tag;
+
+      const user = req.user;
+      const isAdmin = user?.role === 'admin';
+      const capabilities = Array.isArray(user?.capabilities) ? user.capabilities : [];
+
+      if (!isAdmin && capabilities.includes('leads_view_assigned') && user?.id) {
+        filters.userId = user.id;
+      }
+
+      const currentPage = page ? parseInt(page, 10) : 1;
+      const pageSize = limit ? parseInt(limit, 10) : 50;
+      const offset = (currentPage - 1) * pageSize;
+
+      const { calls, total } = await this.callLoggingService.getCallLogsLeadStatus(
+        schema,
+        tenantId,
+        filters,
+        pageSize,
+        offset
+      );
+
+      const totalPages = Math.ceil(total / pageSize);
+
+      return res.json({
+        success: true,
+        logs: calls,
+        count: calls.length,
+        pagination: {
+          page: currentPage,
+          limit: pageSize,
+          total: total,
+          totalPages: totalPages,
+          hasNextPage: currentPage < totalPages,
+          hasPreviousPage: currentPage > 1
+        }
+      });
+    } catch (error) {
+      logger.error('Get call logs lead status error:', error);
+      return res.json({
+        success: true,
+        logs: [],
+        data: [],
+        count: 0,
+        pagination: {
+          page: 1,
+          limit: 50,
+          total: 0,
+          totalPages: 0,
+          hasNextPage: false,
+          hasPreviousPage: false
+        },
+        warning: 'Voice agent tables not yet migrated'
+      });
+    }
+  }
+
+  /**
    * POST /resolve-phones
    * Resolve phone numbers from company or employee caches
    */

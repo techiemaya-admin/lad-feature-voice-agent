@@ -205,6 +205,12 @@ class CallLoggingService {
     return { calls, total };
   }
 
+  async getCallLogsLeadStatus(schema, tenantId, filters = {}, limit = 50, offset = 0) {
+    const calls = await this.callModel.getCallLogsLeadStatus(schema, tenantId, filters, limit, offset);
+    const total = await this.callModel.getCallLogsLeadStatusCount(schema, tenantId, filters);
+    return { calls, total };
+  }
+
   /**
    * Get call statistics
    * 
