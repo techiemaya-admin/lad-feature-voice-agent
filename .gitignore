@@ -29,6 +29,13 @@ Thumbs.db
 lad-sandbox/
 lad-sandbox/**
 
+
+
+# Secrets (NEVER commit)
+secrets/
+backend/secrets/
+**/secrets/
+
 # Temporary standalone testing folders (NEVER commit)
 temp-standalone/
 temp-standalone/**
