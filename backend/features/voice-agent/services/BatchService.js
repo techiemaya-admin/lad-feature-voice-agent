@@ -1,4 +1,5 @@
 const BatchRepository = require('../repositories/BatchRepository');
+const RecordingService = require('./RecordingService');
 let logger;
 try {
   logger = require('../../../core/utils/logger');
@@ -9,6 +10,7 @@ try {
 class BatchService {
   constructor(pool) {
     this.batchRepository = new BatchRepository(pool);
+    this.recordingService = new RecordingService();
   }
 
   /**
@@ -19,9 +21,55 @@ class BatchService {
       const batches = await this.batchRepository.getBatchesByTenant(tenantId, schema, limit, offset);
       const total = await this.batchRepository.getBatchesCountByTenant(tenantId, schema);
 
+      const batchesWithSignedAttachments = await Promise.all(
+        (batches || []).map(async (batch) => {
+          try {
+            const attachmentUrl = batch?.attachments;
+
+            if (!attachmentUrl || typeof attachmentUrl !== 'string') {
+              return batch;
+            }
+
+            const trimmedUrl = attachmentUrl.trim();
+            if (!trimmedUrl.startsWith('gs://')) {
+              return {
+                ...batch,
+                attachment_file_name: trimmedUrl.split('/').pop() || null,
+                attachment_signed_url: trimmedUrl,
+                attachment_expires_at: null
+              };
+            }
+
+            const parsed = this.recordingService.parseGCSUrl(trimmedUrl);
+            const fileName = parsed?.path ? parsed.path.split('/').pop() : null;
+
+            const signed = await this.recordingService.getGCSSignedUrl(trimmedUrl);
+
+            return {
+              ...batch,
+              attachment_file_name: fileName,
+              attachment_signed_url: signed?.success ? signed.signedUrl : null,
+              attachment_expires_at: signed?.success ? signed.expiresAt : null
+            };
+          } catch (e) {
+            logger.warn('[BatchService] Failed to sign batch attachment', {
+              error: e?.message,
+              tenantId,
+              batchId: batch?.id
+            });
+            return {
+              ...batch,
+              attachment_file_name: null,
+              attachment_signed_url: null,
+              attachment_expires_at: null
+            };
+          }
+        })
+      );
+
       return {
         success: true,
-        data: batches,
+        data: batchesWithSignedAttachments,
         total
       };
     } catch (error) {

@@ -6,6 +6,7 @@
  */
 
 const axios = require('axios');
+const { Storage } = require('@google-cloud/storage');
 let logger;
 try {
   logger = require('../../../core/utils/logger');
@@ -19,6 +20,57 @@ class RecordingService {
     this.baseUrl = config.baseUrl || process.env.BASE_URL;
     this.signingEndpoint = config.signingEndpoint || process.env.SIGNING_ENDPOINT_URL;
     this.defaultExpirationHours = 96; // 4 days
+    this.storage = new Storage();
+  }
+
+  _getSignedUrlExpiresSeconds() {
+    const seconds = parseInt(process.env.GCS_SIGNED_URL_EXPIRES_SECONDS || '3600', 10);
+    if (Number.isNaN(seconds) || seconds <= 0) return 3600;
+    return seconds;
+  }
+
+  async getGCSSignedUrl(gsUrl, expirationSeconds = null) {
+    const seconds = expirationSeconds || this._getSignedUrlExpiresSeconds();
+
+    if (!gsUrl || !gsUrl.startsWith('gs://')) {
+      return {
+        success: true,
+        signedUrl: gsUrl,
+        expiresAt: null,
+        originalUrl: gsUrl
+      };
+    }
+
+    const parsed = this.parseGCSUrl(gsUrl);
+    if (!parsed?.bucket || !parsed?.path) {
+      return {
+        success: false,
+        error: 'Invalid GCS URL'
+      };
+    }
+
+    try {
+      const file = this.storage.bucket(parsed.bucket).file(parsed.path);
+      const expiresAtMs = Date.now() + seconds * 1000;
+      const [url] = await file.getSignedUrl({
+        version: 'v4',
+        action: 'read',
+        expires: expiresAtMs
+      });
+
+      return {
+        success: true,
+        signedUrl: url,
+        expiresAt: new Date(expiresAtMs).toISOString(),
+        originalUrl: gsUrl
+      };
+    } catch (error) {
+      logger.error('GCS signed URL error:', error.message);
+      return {
+        success: false,
+        error: error.message
+      };
+    }
   }
 
   /**
