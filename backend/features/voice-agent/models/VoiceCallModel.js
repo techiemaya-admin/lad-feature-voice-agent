@@ -326,6 +326,12 @@ class VoiceCallModel {
       paramIndex++;
     }
 
+    if (filters.leadTag) {
+      whereClauses.push(`$${paramIndex} = ANY(l.tags)`);
+      values.push(filters.leadTag);
+      paramIndex++;
+    }
+
     const query = `
       SELECT 
         vcl.id AS call_log_id,
@@ -412,9 +418,16 @@ class VoiceCallModel {
       paramIndex++;
     }
 
+    if (filters.leadTag) {
+      whereClauses.push(`$${paramIndex} = ANY(l.tags)`);
+      values.push(filters.leadTag);
+      paramIndex++;
+    }
+
     const query = `
       SELECT COUNT(*) as total
       FROM ${safeSchema}.voice_call_logs vcl
+      LEFT JOIN ${safeSchema}.leads l ON l.id = vcl.lead_id AND l.tenant_id = vcl.tenant_id
       WHERE ${whereClauses.map(c => `vcl.${c}`).join(' AND ')}
     `;
 

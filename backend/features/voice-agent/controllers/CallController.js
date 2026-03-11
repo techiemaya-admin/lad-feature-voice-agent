@@ -342,10 +342,11 @@ class CallController {
     try {
       const tenantId = req.tenantId || req.user?.tenantId;
       const schema = getSchema(req);
-      const { status, agent_id, start_date, from_date, to_date, page, limit } = req.query;
+      const { status, lead_tag, agent_id, start_date, from_date, to_date, page, limit } = req.query;
 
       const filters = {};
       if (status) filters.status = status;
+      if (lead_tag) filters.leadTag = lead_tag;
       if (agent_id) filters.agentId = agent_id;
       if (start_date) filters.startDate = new Date(start_date);
       if (from_date) filters.fromDate = new Date(from_date);

@@ -424,15 +424,6 @@ router.get(
 );
 
 /**
- * GET /calls/lead-status
- * Get call logs filtered by status and lead tag
- */
-router.get(
-  '/calls/lead-status',
-  jwtAuth,
-  (req, res) => callController.getCallLogsLeadStatus(req, res)
-);
-
 /**
  * POST /calls/update-credits
  * Recalculate and update credits for completed calls
