@@ -326,6 +326,12 @@ class VoiceCallModel {
       paramIndex++;
     }
 
+    if (filters.leadTag) {
+      whereClauses.push(`$${paramIndex} = ANY(l.tags)`);
+      values.push(filters.leadTag);
+      paramIndex++;
+    }
+
     const query = `
       SELECT 
         vcl.id AS call_log_id,
@@ -365,98 +371,6 @@ class VoiceCallModel {
     values.push(limit, offset);
     const result = await this.pool.query(query, values);
     return result.rows;
-  }
-
-  async getCallLogsLeadStatus(schema, tenantId, filters = {}, limit = 50, offset = 0) {
-    const safeSchema = sanitizeSchema(schema);
-
-    const whereClauses = ['vcl.tenant_id = $1'];
-    const values = [tenantId];
-    let paramIndex = 2;
-
-    if (filters.status) {
-      whereClauses.push(`vcl.status = $${paramIndex}`);
-      values.push(filters.status);
-      paramIndex++;
-    }
-
-    if (filters.leadTag) {
-      whereClauses.push(`$${paramIndex} = ANY(l.tags)`);
-      values.push(filters.leadTag);
-      paramIndex++;
-    }
-
-    if (filters.userId) {
-      whereClauses.push(`vcl.initiated_by_user_id = $${paramIndex}`);
-      values.push(filters.userId);
-      paramIndex++;
-    }
-
-    const query = `
-      SELECT 
-        vcl.id AS call_log_id,
-        vcl.tenant_id,
-        vcl.initiated_by_user_id,
-        vcl.lead_id,
-        vcl.agent_id,
-        va.name AS agent_name,
-        vcl.status,
-        vcl.started_at,
-        vcl.duration_seconds,
-        vcl.recording_url,
-        l.first_name AS lead_first_name,
-        l.last_name AS lead_last_name,
-        l.tags AS lead_tags
-      FROM ${safeSchema}.voice_call_logs vcl
-      LEFT JOIN ${safeSchema}.leads l 
-        ON l.id = vcl.lead_id AND l.tenant_id = vcl.tenant_id
-      LEFT JOIN ${safeSchema}.voice_agents va 
-        ON va.id = vcl.agent_id::bigint AND va.tenant_id = vcl.tenant_id
-      WHERE ${whereClauses.join(' AND ')}
-      ORDER BY vcl.started_at DESC
-      LIMIT $${paramIndex} OFFSET $${paramIndex + 1}
-    `;
-
-    values.push(limit, offset);
-    const result = await this.pool.query(query, values);
-    return result.rows;
-  }
-
-  async getCallLogsLeadStatusCount(schema, tenantId, filters = {}) {
-    const safeSchema = sanitizeSchema(schema);
-
-    const whereClauses = ['vcl.tenant_id = $1'];
-    const values = [tenantId];
-    let paramIndex = 2;
-
-    if (filters.status) {
-      whereClauses.push(`vcl.status = $${paramIndex}`);
-      values.push(filters.status);
-      paramIndex++;
-    }
-
-    if (filters.leadTag) {
-      whereClauses.push(`$${paramIndex} = ANY(l.tags)`);
-      values.push(filters.leadTag);
-      paramIndex++;
-    }
-
-    if (filters.userId) {
-      whereClauses.push(`vcl.initiated_by_user_id = $${paramIndex}`);
-      values.push(filters.userId);
-      paramIndex++;
-    }
-
-    const query = `
-      SELECT COUNT(*) as total
-      FROM ${safeSchema}.voice_call_logs vcl
-      LEFT JOIN ${safeSchema}.leads l 
-        ON l.id = vcl.lead_id AND l.tenant_id = vcl.tenant_id
-      WHERE ${whereClauses.join(' AND ')}
-    `;
-
-    const result = await this.pool.query(query, values);
-    return parseInt(result.rows[0].total, 10);
   }
 
   /**
@@ -504,9 +418,16 @@ class VoiceCallModel {
       paramIndex++;
     }
 
+    if (filters.leadTag) {
+      whereClauses.push(`$${paramIndex} = ANY(l.tags)`);
+      values.push(filters.leadTag);
+      paramIndex++;
+    }
+
     const query = `
       SELECT COUNT(*) as total
       FROM ${safeSchema}.voice_call_logs vcl
+      LEFT JOIN ${safeSchema}.leads l ON l.id = vcl.lead_id AND l.tenant_id = vcl.tenant_id
       WHERE ${whereClauses.map(c => `vcl.${c}`).join(' AND ')}
     `;
 
