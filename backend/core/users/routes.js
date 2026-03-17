@@ -45,6 +45,13 @@
 const express = require('express');
 const router = express.Router();
 const { query } = require('../../shared/database/connection');
+const UserRepository = require('./repositories/UserRepository');
+const UserService = require('./services/UserService');
+const UserController = require('./controllers/UserController');
+
+const userRepository = new UserRepository();
+const userService = new UserService(userRepository);
+const userController = new UserController(userService);
 
 // GET all users (admin/manager access)
 router.get('/', async (req, res) => {
@@ -79,45 +86,11 @@ router.get('/', async (req, res) => {
 
 // Core user management routes (always available)
 router.get('/profile', async (req, res) => {
-  try {
-    const userId = req.user.id;
-    
-    // Get user profile
-    const profile = {
-      id: userId,
-      email: req.user.email,
-      role: req.user.role,
-      clientId: req.user.clientId,
-      plan: 'premium',
-      createdAt: new Date()
-    };
-    
-    res.json({ success: true, profile });
-  } catch (error) {
-    res.status(500).json({
-      success: false,
-      error: 'Failed to fetch profile'
-    });
-  }
+  return userController.getProfile(req, res);
 });
 
 router.put('/profile', async (req, res) => {
-  try {
-    const userId = req.user.id;
-    const updates = req.body;
-    
-    // Update user profile
-    
-    res.json({
-      success: true,
-      message: 'Profile updated successfully'
-    });
-  } catch (error) {
-    res.status(400).json({
-      success: false,
-      error: 'Failed to update profile'
-    });
-  }
+  return userController.updateProfile(req, res);
 });
 
 router.get('/settings', async (req, res) => {
